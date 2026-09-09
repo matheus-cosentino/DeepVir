@@ -70,7 +70,25 @@ RESOURCES_DIR = _os.path.join(_PROJECT_ROOT, "resources")
 with open(config["sample_list"], "r") as file:
     SAMPLE = [line.strip() for line in file if line.strip()]
 
+# Guard: if the sample name is a subdirectory inside data_dir, skip it.
+# This prevents folders (e.g. per-sample BCL2FASTQ dirs) from being
+# mistakenly queued as SRA downloads.
+_filtered_sample = []
+for sample in SAMPLE:
+    if os.path.isdir(os.path.join(DATA, sample)):
+        print(f"[WARNING] '{sample}' is a directory inside '{DATA}' — skipping.")
+        continue
+    _filtered_sample.append(sample)
+SAMPLE = _filtered_sample
+
 SAMPLE_META = identify_data_type(SAMPLE, DATA)
+
+# Remove from SAMPLE any entry that identify_data_type chose to skip
+# (e.g. names that are subdirectories in DATA rather than actual sample files).
+_skipped = [s for s in SAMPLE if s not in SAMPLE_META]
+if _skipped:
+    print(f"[INFO] Removing {len(_skipped)} skipped sample(s) from the active list: {_skipped}")
+SAMPLE = [s for s in SAMPLE if s in SAMPLE_META]
 
 ############################################
 # --- 4. Export functions to be used.  --- #
