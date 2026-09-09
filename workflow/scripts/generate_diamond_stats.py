@@ -31,13 +31,23 @@ def main():
         tool_name = getattr(wildcards, 'tool', 'reads')
 
         # Read Diamond report
-        # Format: qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore [taxid lineage...]
+        # Format: qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore [extra...]
+        # outfmt 6 has NO header — we must specify header=None to avoid the first
+        # data row being silently consumed as column names.
+        BASE_COLS = ["qseqid","sseqid","pident","length","mismatch",
+                     "gapopen","qstart","qend","sstart","send","evalue","bitscore"]
         try:
-            df = pd.read_csv(diamond_file, sep='\t', comment='#')
+            df = pd.read_csv(diamond_file, sep='\t', comment='#', header=None)
+            if len(df.columns) >= len(BASE_COLS):
+                # Assign base names; any extra columns get generic names
+                extra = [f"col{i}" for i in range(len(BASE_COLS), len(df.columns))]
+                df.columns = BASE_COLS + extra
+            else:
+                df.columns = BASE_COLS[:len(df.columns)]
         except pd.errors.EmptyDataError:
             # No hits in the diamond report — file is empty or only contains comment lines
             log.write(f"WARNING: Diamond report is empty (no hits) for {diamond_file}. Writing zero-hit stats.\n")
-            df = pd.DataFrame()
+            df = pd.DataFrame(columns=BASE_COLS)
         
         # Count unique queries with hits
         num_queries_with_hits = len(df['qseqid'].unique()) if 'qseqid' in df.columns and len(df) > 0 else 0
