@@ -590,16 +590,19 @@ def get_denovo_unpaired(wildcards):
     - UNPAIRED or SRA-SINGLE: Return 'unp' main reads.
     """
     meta = SAMPLE_META.get(wildcards.sample)
+
+    if not meta:
+        return []
     
     # 1. True Paired (SRA or Local) -> Return Orphans
-    if meta and meta['mode'] in ['PAIRED', 'SRA'] and len(meta['files']) > 1:
+    if meta['mode'] in ['PAIRED', 'SRA'] and len(meta['files']) > 1:
         return os.path.join(OUT_DIR, wildcards.sample, "fastp", f"{wildcards.sample}_orphans.fastq.gz")
     
     # 2. True Single (SRA or Local) -> Return Unpaired Main Reads
     # We check if mode is UNPAIRED OR if mode is SRA with only 1 file
     is_sra_single = (meta['mode'] == 'SRA' and len(meta['files']) == 1)
     
-    if meta and (meta['mode'] == 'UNPAIRED' or is_sra_single):
+    if meta['mode'] == 'UNPAIRED' or is_sra_single:
         # This forces Snakemake to use fastp_unpaired because it needs the '_unp' file
         return os.path.join(OUT_DIR, wildcards.sample, "fastp", f"{wildcards.sample}_unp.fastq.gz")
         
@@ -612,10 +615,13 @@ def get_ONP_input(wildcards):
     2. If PAIRED, returns empty list (skips Flye for Illumina samples).
     """
     meta = SAMPLE_META.get(wildcards.sample)
-    
+
+    if not meta:
+        return []
+
     is_sra_single = (meta['mode'] == 'SRA' and len(meta['files']) == 1)
 
-    if meta and (meta['mode'] == 'UNPAIRED' or is_sra_single):
+    if meta['mode'] == 'UNPAIRED' or is_sra_single:
         # For single end, we use the fastp 'unp' output
         return os.path.join(OUT_DIR, wildcards.sample, "fastp", f"{wildcards.sample}_unp.fastq.gz")
     
