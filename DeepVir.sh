@@ -276,8 +276,17 @@ generate_sample_list(){
 
     if [[ -n "$sra" && -f "$sra" ]]; then
         echo -e "\n${ylo}[INFO]${nc} Appending SRA Accessions..."
-        echo "" >> "$sample_list" 
-        cat "$sra" >> "$sample_list"
+        echo "" >> "$sample_list"
+        # Filter out any line that is the name of a directory inside $input,
+        # so subdirectory names are never mistakenly queued as SRA downloads.
+        while IFS= read -r acc || [[ -n "$acc" ]]; do
+            [[ -z "$acc" ]] && continue
+            if [[ -d "$input/$acc" ]]; then
+                echo -e "${ylo}[WARNING]${nc} '$acc' is a directory inside '$input' — skipping (not treated as SRA)."
+            else
+                echo "$acc" >> "$sample_list"
+            fi
+        done < "$sra"
         echo "" >> "$sample_list"
     fi
 

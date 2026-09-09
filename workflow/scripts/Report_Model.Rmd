@@ -1,7 +1,7 @@
 ---
 title: "Discovery Module Report"
 subtitle: "Sample **`r params$sample_name`**"
-author: "MSc. Matheus Cosentino NovaVir v.2025.12"
+author: "MSc. Matheus Cosentino DeepVir v.1.0"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output: 
   html_document:
@@ -30,7 +30,7 @@ The analysis is structured into four parts:
 
 4. Report of Contigs within HMMs hits for the **RNA-dependent RNA Polymerase (RdRp)** 
 
-Reproducibility of analysis and report are ensured by the NovaVir pipeline (https://github.com/matheus-cosentino/novavir.git).
+Reproducibility of analysis and report are ensured by the DeepVir pipeline (https://github.com/matheus-cosentino/deepvir.git).
 
 ```{r functions-local, message=FALSE, warning=FALSE, echo = FALSE}
 summarize_dnabin_lengths <- function(dnabin_object, object_label) {
@@ -219,7 +219,7 @@ institution_logo_paths <- params$logos[!grepl(pipeline_logo_name, params$logos, 
 
 # Check if the pipeline logo was found
 if (length(pipeline_logo_path) == 0) {
-  warning("Pipeline logo (NovaVir_Logo.png) not found in the passed paths.")
+  warning("Pipeline logo (DeepVir_Logo.png) not found in the passed paths.")
   # Assign an empty string or placeholder if missing
   pipeline_logo_path <- ""
 }
@@ -855,7 +855,7 @@ To mitigate the risk of **false positives** arising from misidentified **Host Pr
 
 ### Pipeline
 
-```{r incluir-logos-NovaVir, echo=FALSE, fig.show='hold', out.width='50%', out.height='10%'}
+```{r incluir-logos-DeepVir, echo=FALSE, fig.show='hold', out.width='50%', out.height='10%'}
 # Use the pipeline_logo_path variable defined in the logo-setup chunk
 if (length(pipeline_logo_path) > 0 && pipeline_logo_path != "") {
   knitr::include_graphics(pipeline_logo_path)

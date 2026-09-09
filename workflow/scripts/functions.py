@@ -421,6 +421,13 @@ def identify_data_type(sample_list, data_dir):
     #print(f"[INFO] Checking input availability for {len(sample_list)} samples...")
 
     for sample in sample_list:
+        # Guard: if the sample name is a subdirectory inside data_dir, skip it.
+        # This prevents folders (e.g. fastp output dirs, tmp dirs) from being
+        # mistakenly queued as SRA downloads.
+        if os.path.isdir(os.path.join(data_dir, sample)):
+            print(f"[WARNING] '{sample}' is a directory inside '{data_dir}' — skipping (not treated as SRA).")
+            continue
+
         # 1. Definição de caminhos esperados (Prioridade de checagem)
         
         # A. Contigs (.fasta or .fa or .fas)
