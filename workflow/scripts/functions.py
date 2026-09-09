@@ -421,33 +421,36 @@ def identify_data_type(sample_list, data_dir):
     #print(f"[INFO] Checking input availability for {len(sample_list)} samples...")
 
     for sample in sample_list:
-        # Guard: if the sample name is a subdirectory inside data_dir, skip it.
-        # This prevents folders (e.g. fastp output dirs, tmp dirs) from being
-        # mistakenly queued as SRA downloads.
-        if os.path.isdir(os.path.join(data_dir, sample)):
-            print(f"[WARNING] '{sample}' is a directory inside '{data_dir}' — skipping (not treated as SRA).")
-            continue
+        # If the sample name matches a subdirectory inside data_dir, look for
+        # FASTQ/FASTA files *inside* that subdirectory before trying data_dir.
+        # This handles BCL2FASTQ-style output where each sample has its own folder.
+        sample_dir = os.path.join(data_dir, sample)
+        if os.path.isdir(sample_dir):
+            print(f"[INFO] '{sample}' is a subdirectory inside '{data_dir}' — searching for reads inside it.")
+            data_dir_for_sample = sample_dir
+        else:
+            data_dir_for_sample = data_dir
 
         # 1. Definição de caminhos esperados (Prioridade de checagem)
         
         # A. Contigs (.fasta or .fa or .fas)
-        path_fasta = os.path.join(data_dir, f"{sample}.fasta")
-        path_fa = os.path.join(data_dir, f"{sample}.fa")
-        path_fas = os.path.join(data_dir, f"{sample}.fas")
+        path_fasta = os.path.join(data_dir_for_sample, f"{sample}.fasta")
+        path_fa = os.path.join(data_dir_for_sample, f"{sample}.fa")
+        path_fas = os.path.join(data_dir_for_sample, f"{sample}.fas")
         
         # B. Paired FastQ (_R1/_R2 ou _1/_2)
-        p_r1 = os.path.join(data_dir, f"{sample}_R1.fastq.gz")
-        p_r2 = os.path.join(data_dir, f"{sample}_R2.fastq.gz")
-        p_1  = os.path.join(data_dir, f"{sample}_1.fastq.gz")
-        p_2  = os.path.join(data_dir, f"{sample}_2.fastq.gz")
-        p_01  = os.path.join(data_dir, f"{sample}_R1_001.fastq.gz")
-        p_02  = os.path.join(data_dir, f"{sample}_R2_001.fastq.gz")
+        p_r1 = os.path.join(data_dir_for_sample, f"{sample}_R1.fastq.gz")
+        p_r2 = os.path.join(data_dir_for_sample, f"{sample}_R2.fastq.gz")
+        p_1  = os.path.join(data_dir_for_sample, f"{sample}_1.fastq.gz")
+        p_2  = os.path.join(data_dir_for_sample, f"{sample}_2.fastq.gz")
+        p_01  = os.path.join(data_dir_for_sample, f"{sample}_R1_001.fastq.gz")
+        p_02  = os.path.join(data_dir_for_sample, f"{sample}_R2_001.fastq.gz")
         
         # C. Unpaired FastQ
-        p_unpR1 = os.path.join(data_dir, f"{sample}_R1.fastq.gz")
-        p_unp1  = os.path.join(data_dir, f"{sample}_1.fastq.gz")
-        p_unp  = os.path.join(data_dir, f"{sample}.fastq.gz")
-        p_unp01  = os.path.join(data_dir, f"{sample}_R1_001.fastq.gz")
+        p_unpR1 = os.path.join(data_dir_for_sample, f"{sample}_R1.fastq.gz")
+        p_unp1  = os.path.join(data_dir_for_sample, f"{sample}_1.fastq.gz")
+        p_unp  = os.path.join(data_dir_for_sample, f"{sample}.fastq.gz")
+        p_unp01  = os.path.join(data_dir_for_sample, f"{sample}_R1_001.fastq.gz")
 
         # 1. Contig?
         if os.path.exists(path_fasta):
@@ -477,6 +480,7 @@ def identify_data_type(sample_list, data_dir):
             
         # 4. None? Download (SRA)
         else:
+            # SRA downloads always land in the parent data_dir, not a subdirectory
             future_r1 = os.path.join(data_dir, f"{sample}_1.fastq.gz")
             future_r2 = os.path.join(data_dir, f"{sample}_2.fastq.gz")
             
