@@ -32,7 +32,12 @@ def main():
 
         # Read Diamond report
         # Format: qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore [taxid lineage...]
-        df = pd.read_csv(diamond_file, sep='\t', comment='#')
+        try:
+            df = pd.read_csv(diamond_file, sep='\t', comment='#')
+        except pd.errors.EmptyDataError:
+            # No hits in the diamond report — file is empty or only contains comment lines
+            log.write(f"WARNING: Diamond report is empty (no hits) for {diamond_file}. Writing zero-hit stats.\n")
+            df = pd.DataFrame()
         
         # Count unique queries with hits
         num_queries_with_hits = len(df['qseqid'].unique()) if 'qseqid' in df.columns and len(df) > 0 else 0

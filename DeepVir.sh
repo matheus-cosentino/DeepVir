@@ -534,7 +534,6 @@ snakemake --profile "$SNAKEMAKE_PROFILE" \
     --conda-prefix "$CONDA_DIR" \
     --configfile "$main_config" "$run_overrides" \
     --shadow-prefix "$SHADOW_DIR" \
-    --rerun-triggers mtime \
     --keep-going --scheduler greedy
 
 echo -e "\n${green}> Snakemake: Creating DAG & Report...${nc}"
