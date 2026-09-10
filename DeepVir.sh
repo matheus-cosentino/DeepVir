@@ -23,7 +23,7 @@ red="\033[1;31m"
 ylo="\033[1;33m"   
 nc="\033[0m"       
 
-# Nome do ambiente Conda (deve bater com workflow/envs/DeepVir.yaml)
+# Conda environment name (must match workflow/envs/DeepVir.yaml)
 ENV_NAME="DeepVir"
 ENV_FILE="workflow/envs/DeepVir.yaml"
 
@@ -186,7 +186,7 @@ manage_environment(){
          fi
     fi
 
-    if conda env list | grep -q "^${ENV_NAME} "; then
+    if conda env list 2>/dev/null | grep -q "^${ENV_NAME} "; then
         echo -e "       > Environment found: ${green}Yes${nc}"
         if [[ "$update_env" == "true" ]]; then
             echo -e "${blu}[INFO]${nc} Updating environment from ${ylo}$ENV_FILE${nc}..."
@@ -215,23 +215,23 @@ manage_environment(){
 ###################################
 
 setup_resources(){
-    # Diretório base de recursos do workflow
+    # Base resources directory for the workflow
     RES_DIR="$PROJECT_DIR/resources"
 
     # --- 1. Diamond DB ---
-    # Verifica se existe um DB externo definido
+    # Check if an external DB path was provided
     if [[ -n "$diamond_db" ]]; then
-        # Verifica se o arquivo ou prefixo existe (glob simples)
+        # Check if the file or prefix exists (simple glob)
         if ls ${diamond_db}* 1> /dev/null 2>&1; then
             echo -e "${blu}[INFO]${nc} Linking external Diamond DB files to resources/diamond/..."
             
             mkdir -p "$RES_DIR/diamond"
             
-            # Limpa links antigos
+            # Remove old symlinks
             rm -f "$RES_DIR/diamond/"*
             
-            # Linka TODOS os arquivos que começam com o prefixo fornecido
-            # Ex: se user passar /path/to/nr, vai linkar nr.00.acc, nr.00.phr, etc.
+            # Link ALL files matching the given prefix
+            # e.g. if user passes /path/to/nr, links nr.00.acc, nr.00.phr, etc.
             ln -sf ${diamond_db}* "$RES_DIR/diamond/"
         else
             echo -e "${red}[ERROR]${nc} Diamond DB files not found for prefix: $diamond_db"
@@ -240,19 +240,19 @@ setup_resources(){
     fi
 
     # --- 2. Kraken2 DB ---
-    # O config.yaml deve apontar para: "resources/kraken2/"
+    # config.yaml must point to: "resources/kraken2/"
     if [[ -n "$kraken2_db" ]]; then
-        # Remove a barra final se houver
+        # Strip trailing slash if present
         kraken2_db=${kraken2_db%/}
 
         if [[ -d "$kraken2_db" ]]; then
             echo -e "${blu}[INFO]${nc} Linking external Kraken2 DB to resources/kraken2/..."
             
-            # Remove o diretório ou link 'kraken2' existente dentro de resources
-            # Atenção: Isso substitui a pasta local pelo link para a externa
+            # Remove existing 'kraken2' directory or symlink inside resources
+            # Note: this replaces the local folder with a link to the external one
             rm -rf "$RES_DIR/kraken2_db"
             
-            # Cria o link simbólico do diretório inteiro
+            # Create a symlink pointing to the entire external directory
             ln -sfn "$kraken2_db" "$RES_DIR/kraken2"
         else
             echo -e "${red}[ERROR]${nc} Kraken2 directory not found: $kraken2_db"
@@ -312,7 +312,7 @@ generate_sample_list(){
 ###########################
 # --- Main Execution --- #
 ###########################
-# Whole path of WORDDIR
+# Absolute path to the project root
 PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)
 cd "$PROJECT_DIR"
 set -e -o pipefail
@@ -322,11 +322,11 @@ input="data"
 jobs=15
 profile="profile_slurm"
 temp_dir=""
-snakemake_workdir=""    # Set via --workdir; defaults to PROJECT_DIR after arg parsing
-update_env="false"      # Update conda env only if --update-env is passed
+snakemake_workdir=""    # Set via --workdir; defaults to temp_dir after arg parsing
+update_env="false"      # Update conda env only when --update-env is explicitly passed
 
-# Module Defaults (Must match the keys in your config.yaml)
-mod_keep_download="true"   # lowercase for yaml
+# Module defaults (keys must match config.yaml)
+mod_keep_download="true"   # lowercase to match YAML boolean
 mod_assembly="false"
 mod_kraken2="false"
 mod_diamond="false"
@@ -424,19 +424,19 @@ for p in paths:
         except Exception: pass
 print('/tmp/${USER}/') # fallback
 ")
-    # Limpa possíveis quebras de linha que possam quebrar o mkdir no bash
+    # Strip any newline characters that could break the mkdir call
     temp_dir=$(echo "$temp_dir" | tr -d '\r\n')
 fi
 
-# Garante que o usuário possua sua própria pasta para evitar colisão de permissões
-# caso o parâmetro recuperado (ex: /scr) não possua identificação.
+# Ensure the path contains the username to avoid permission collisions
+# when the discovered path (e.g. /scr) has no user-specific subdirectory.
 if [[ "$temp_dir" != *"${USER}"* ]]; then
     temp_dir="${temp_dir%/}/${USER}"
 fi
 
 # Resolve Snakemake working directory.
-# Por padrão usa o mesmo scratch que --temp-dir — ambos apontam para o mesmo lugar.
-# Use --workdir separadamente só se precisar de localizações distintas.
+# Defaults to the same path as --temp-dir — both point to the same location.
+# Use --workdir separately only if distinct locations are needed.
 if [[ -z "$snakemake_workdir" ]]; then
     snakemake_workdir="$temp_dir"
 fi
@@ -518,9 +518,9 @@ fi
 echo -e "${blu}[INFO]${nc} Profile           set to: ${ylo}$SNAKEMAKE_PROFILE${nc}"
 echo -e "${blu}[INFO]${nc} Snakefile         set to: ${ylo}$SNAKEFILE${nc}"
 
-# configfile: no Snakefile usa caminho absoluto (via workflow.snakefile), por isso
-# --directory pode ser passado sem quebrar a resolução do config.
-# Os jobs SLURM rodarão a partir do scratch (snakemake_workdir) em vez do home/NFS.
+# The Snakefile resolves configfile using an absolute path (via workflow.snakefile),
+# so --directory can be set to scratch without breaking config resolution.
+# SLURM jobs will run from scratch (snakemake_workdir) instead of the home/NFS directory.
 
 echo -e "\n${green}> Snakemake: Unlocking working directory...${nc}"
 snakemake --profile "$SNAKEMAKE_PROFILE" --snakefile "$SNAKEFILE" \
