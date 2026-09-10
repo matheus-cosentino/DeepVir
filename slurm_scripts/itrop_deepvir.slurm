@@ -5,7 +5,7 @@ set -euo pipefail
 # --- Configurações do job SLURM ---
 #SBATCH --job-name=DeepVir                      # Nome do job na fila
 #SBATCH --cpus-per-task=1                        # CPUs do wrapper (o pipeline gerencia seus próprios threads)
-#SBATCH --mem=32G                                 # Memória do wrapper
+#SBATCH --mem=64G                                 # Memória do wrapper (medido: ~54GB MaxRSS via sacct; inclui mamba solver + Snakemake DAG + monitoramento SLURM)
 #SBATCH --time=7-00:00:00                        # Tempo máximo: 3 dias
 #SBATCH --constraint=infiniband                 # Log de saída (%j = ID do job)
 
@@ -88,7 +88,8 @@ bash DeepVir.sh \
     --darkmatter \
     --diamond_db "${DIAMOND_BANK}" \
     --kraken2_db "${KRAKEN2_BANK}" \
-    --temp-dir "${TEMP_DIR}"  --profile profiles/profile_slurm/
+    --temp-dir "${TEMP_DIR}" \
+    --profile profiles/profile_slurm/
 
 # --- 4. RECUPERAÇÃO DOS RESULTADOS ---
 # Copia do scratch para o destino final antes que o job encerre

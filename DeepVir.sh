@@ -122,6 +122,9 @@ help(){
                         (default: auto-discovered from profile's default-resources.tmpdir)
    --workdir <DIR>      Override only the Snakemake working directory if you need it
                         separate from --temp-dir (default: same as --temp-dir)
+   --update-env         Force 'mamba env update' even if the environment already exists.
+                        By default the environment is only created if absent; use this
+                        flag when you have changed workflow/envs/DeepVir.yaml.
  "
 }
 
@@ -185,8 +188,12 @@ manage_environment(){
 
     if conda env list | grep -q "^${ENV_NAME} "; then
         echo -e "       > Environment found: ${green}Yes${nc}"
-        echo -e "${blu}[INFO]${nc} Updating environment from ${ylo}$ENV_FILE${nc}..."
-        run_with_spinner $_PKG_MGR env update --name "$ENV_NAME" --file "$ENV_FILE" --prune --quiet
+        if [[ "$update_env" == "true" ]]; then
+            echo -e "${blu}[INFO]${nc} Updating environment from ${ylo}$ENV_FILE${nc}..."
+            run_with_spinner $_PKG_MGR env update --name "$ENV_NAME" --file "$ENV_FILE" --prune --quiet
+        else
+            echo -e "${blu}[INFO]${nc} Skipping update. Use ${ylo}--update-env${nc} to force it."
+        fi
     else 
         echo -e "       > Environment found: ${red}No${nc}"
         echo -e "${blu}[INFO]${nc} Creating environment from ${ylo}$ENV_FILE${nc}..."
@@ -316,6 +323,7 @@ jobs=15
 profile="profile_slurm"
 temp_dir=""
 snakemake_workdir=""    # Set via --workdir; defaults to PROJECT_DIR after arg parsing
+update_env="false"      # Update conda env only if --update-env is passed
 
 # Module Defaults (Must match the keys in your config.yaml)
 mod_keep_download="true"   # lowercase for yaml
@@ -363,6 +371,7 @@ while [[ $# -gt 0 ]]; do
         # --- Others --- #
         -h|--help) help; exit 0 ;;
         -v|--version) version; exit 0 ;;
+        --update-env) update_env="true"; shift ;;
         *) echo -e "${red}[ERROR]${nc} Unknown argument: $1"; help; exit 1 ;;
     esac
 done
