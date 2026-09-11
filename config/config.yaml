@@ -183,9 +183,9 @@ diamond:
     #- "--more-sensitive"
     - "--sensitive"
 
-  block_size: 6   # -b: RAM consumida é ~6-8 GB por unidade (padrão DIAMOND = 2.0)
-                  # Com 60 GB disponíveis, valores entre 6 e 7 são seguros.
-                  # Reduz drasticamente o número de blocos processados.
+  block_size: 2   # -b: RAM consumida é ~6-8 GB por unidade (padrão DIAMOND = 2.0)
+                  # Alterado de 6 para 2 para reduzir o uso massivo de RAM com reads
+                  # e evitar o erro "vector::reserve corrupted double-linked list".
 
   index_chunks: 4 # -c: número de partes em que o índice é dividido (padrão = 4)
                   # 1 = processa o índice inteiro de uma vez (mais rápido, mais RAM)
