@@ -30,38 +30,44 @@ def main():
         sample_name = wildcards.sample
         tool_name = getattr(wildcards, 'tool', 'reads')
 
-        # Read Diamond report
-        # Format: qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore [extra...]
-        # outfmt 6 has NO header — we must specify header=None to avoid the first
-        # data row being silently consumed as column names.
-        BASE_COLS = ["qseqid","sseqid","pident","length","mismatch",
-                     "gapopen","qstart","qend","sstart","send","evalue","bitscore"]
+        # Read Diamond report in a streaming manner to avoid loading
+        # massive read alignment files into memory with pandas.
+        total_hits = 0
+        sum_identity = 0.0
+        sum_evalue = 0.0
+        sum_bitscore = 0.0
+        unique_queries = set()
+
         try:
-            df = pd.read_csv(diamond_file, sep='\t', comment='#', header=None)
-            if len(df.columns) >= len(BASE_COLS):
-                # Assign base names; any extra columns get generic names
-                extra = [f"col{i}" for i in range(len(BASE_COLS), len(df.columns))]
-                df.columns = BASE_COLS + extra
-            else:
-                df.columns = BASE_COLS[:len(df.columns)]
-        except pd.errors.EmptyDataError:
-            # No hits in the diamond report — file is empty or only contains comment lines
-            log.write(f"WARNING: Diamond report is empty (no hits) for {diamond_file}. Writing zero-hit stats.\n")
-            df = pd.DataFrame(columns=BASE_COLS)
-        
-        # Count unique queries with hits
-        num_queries_with_hits = len(df['qseqid'].unique()) if 'qseqid' in df.columns and len(df) > 0 else 0
-        total_hits = len(df)
-        
-        # Calculate statistics
-        if len(df) > 0:
-            mean_identity = df['pident'].mean() if 'pident' in df.columns else 0
-            mean_evalue = df['evalue'].mean() if 'evalue' in df.columns else 0
-            mean_bitscore = df['bitscore'].mean() if 'bitscore' in df.columns else 0
+            with open(diamond_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    parts = line.split('\t')
+                    if len(parts) >= 12:
+                        total_hits += 1
+                        unique_queries.add(parts[0])
+                        try:
+                            sum_identity += float(parts[2])
+                            sum_evalue += float(parts[10])
+                            sum_bitscore += float(parts[11])
+                        except ValueError:
+                            pass
+        except FileNotFoundError:
+            log.write(f"ERROR: Diamond report file not found: {diamond_file}\n")
+            sys.exit(1)
+
+        num_queries_with_hits = len(unique_queries)
+        if total_hits > 0:
+            mean_identity = sum_identity / total_hits
+            mean_evalue = sum_evalue / total_hits
+            mean_bitscore = sum_bitscore / total_hits
         else:
-            mean_identity = 0
-            mean_evalue = 0
-            mean_bitscore = 0
+            mean_identity = 0.0
+            mean_evalue = 0.0
+            mean_bitscore = 0.0
+            log.write(f"WARNING: Diamond report is empty (no hits) for {diamond_file}. Writing zero-hit stats.\n")
         
         # Create statistics dictionary
         stats_dict = {

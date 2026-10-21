@@ -35,7 +35,8 @@ rule spades:
         input_args = get_spades_params,
         extra = config["spades"]["algorithm"],
         #kmer = lambda wildcards: wildcards.kmer_val
-        kmer = lambda wildcards: wildcards.kmer_val.replace("_", ",")
+        kmer = lambda wildcards: wildcards.kmer_val.replace("_", ","),
+        mem_gb = lambda wildcards, resources: max(1, int(resources.mem_mb // 1024))
     conda:
         SPADES_ENV
     shadow:
@@ -46,7 +47,7 @@ rule spades:
         spades.py \
             {params.extra} \
             --threads {resources.threads} \
-            --memory {resources.mem_mb} \
+            --memory {params.mem_gb} \
             {params.input_args} \
             -o {params.outdir} \
             --tmp-dir {resources.tmpdir} \

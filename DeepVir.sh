@@ -508,8 +508,10 @@ echo -e "${blu}[INFO]${nc} Scratch workdir   set to: ${ylo}$snakemake_workdir${n
 # Resolve absolute profile path for Snakemake 8.0+
 if [[ -d "$PROJECT_DIR/profiles/$profile" ]]; then
     SNAKEMAKE_PROFILE="$PROJECT_DIR/profiles/$profile"
+elif [[ -d "$PROJECT_DIR/$profile" ]]; then
+    SNAKEMAKE_PROFILE="$PROJECT_DIR/$profile"
 elif [[ -d "$profile" ]]; then
-    SNAKEMAKE_PROFILE="$profile"
+    SNAKEMAKE_PROFILE="$(cd "$profile" && pwd)"
 else
     echo -e "${red}[ERROR]${nc} Profile directory not found: $profile"
     exit 1

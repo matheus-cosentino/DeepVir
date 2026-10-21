@@ -250,7 +250,7 @@ def get_multiqc_inputs(wildcards=None, sample=None):
                 tools_expanded.append(tool)
 
     # Assembly Statistics (Number of contigs, N50, etc.)
-    if meta['mode'] != 'CONTIGS':
+    if MODULES.get("assembly", False) and meta['mode'] != 'CONTIGS':
         mqc_inputs.extend(expand("{out_dir}/{sample}/stats/{sample}_{tool}_assembly_stats.tsv",
             out_dir=OUT_DIR, sample=sample_id, tool=tools_expanded))
 
