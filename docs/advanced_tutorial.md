@@ -1,20 +1,37 @@
-# Advanced configuration tutorial
+# Advanced Configuration Tutorial
 
-This page gathers the main options for tuning preprocessing with fastp and choosing the contig assembler in DeepVir.
+This page gathers the main options for tuning preprocessing with `fastp`, selecting the contig assembler, and customizing downstream parameters in DeepVir.
 
-## 1. Where to edit configuration
+## 1. Where to Edit Configuration
 
-The main settings are in the file [config/config.yaml](../config/config.yaml).
+DeepVir offers two ways to customize pipeline parameters:
+1. **Via the Python CLI (`DeepVir.py`) or Desktop GUI (`--gui`)**: Frequently changed parameters such as `fastp` thresholds (`--fastp-length`, `--fastp-quality`) and the *de novo* assembler engine (`--assembler`) can be passed directly on the command line or selected in the GUI, which writes them into `logs/run_overrides.yaml`.
+2. **Via the Static Configuration File**: Global technical parameters (such as SPAdes K-mers, Flye read types, DIAMOND E-values, and PalmAnnot score cutoffs) are stored in [pipeline/config/config.yaml](../pipeline/config/config.yaml).
 
-After you edit this file, save it and run the pipeline again. The workflow will automatically read the updated values.
+After editing [pipeline/config/config.yaml](../pipeline/config/config.yaml), save the file and run `python DeepVir.py` again—the workflow will automatically read the updated values.
 
-## 2. Tuning fastp
+---
 
-fastp is used to filter and clean reads before assembly and taxonomic analysis.
+## 2. Tuning `fastp` Quality Control
 
-### Main parameters
+`fastp` filters and cleans raw reads before assembly and taxonomic analysis.
 
-In the `fastp` section of [config/config.yaml](../config/config.yaml), you can adjust:
+### Setting via Python CLI
+
+You can override `fastp` thresholds directly when calling `DeepVir.py`:
+
+```bash
+python DeepVir.py \
+    --input data \
+    --output results \
+    --fastp-length 50 \
+    --fastp-quality 30 \
+    --assembly --diamond
+```
+
+### Setting in `pipeline/config/config.yaml`
+
+In the `fastp` section of [pipeline/config/config.yaml](../pipeline/config/config.yaml), you can adjust the default values:
 
 - `length_required`: minimum read length after trimming.
 - `qualified_quality_phred`: minimum Phred quality threshold.
@@ -29,22 +46,36 @@ fastp:
     - 30
 ```
 
-### When to change each parameter
+### Practical Recommendations
 
-- If your data are high quality and you want to preserve shorter reads, you can lower `length_required`.
-- If the data are noisy, you can increase `qualified_quality_phred` to values like 30 or 35.
-- For long-read data, it is usually safer to use a larger minimum length, for example `500`.
+- **Standard Illumina data**: `length_required: 30`–`50` and `qualified_quality_phred: 30`.
+- **Lower-quality or degraded RNA samples**: try `20` or `25` for Phred quality and `30` for minimum length.
+- **Nanopore / PacBio long-read data**: use a larger minimum length (`500`) and a lower Phred threshold (`10`). *(In the Desktop GUI, click the **Nanopore / Long-read (L: 500, Q: 10)** preset button.)*
 
-### Practical recommendations
+---
 
-- For standard Illumina data: keep `length_required` at `50` and `qualified_quality_phred` at `30`.
-- For lower-quality samples: try `20` or `25` for quality and `30` or `40` for minimum length.
+## 3. Choosing the Contig Assembler
 
-## 3. Choosing the contig assembler
+You can select the assembler directly from the CLI with `--assembler`:
 
-The assembler choice is controlled in the `tool.denovo` section of [config/config.yaml](../config/config.yaml).
+```bash
+python DeepVir.py \
+    --input data \
+    --output results \
+    --assembly \
+    --assembler megahit \
+    --diamond --darkmatter
+```
 
-Example:
+Available `--assembler` choices:
+- `spades` *(default)*: Best option for Illumina metagenomic and metatranscriptomic reads (`--rnaviral` / `--meta`).
+- `megahit`: Faster and lower memory footprint when you prioritize speed on large short-read datasets.
+- `flye`: Recommended for long-read data (Nanopore / PacBio).
+- `raven`: Fast long-read assembler for Nanopore datasets.
+- `medaka_flye`: Flye assembly followed by Medaka consensus polishing for Oxford Nanopore reads.
+- `medaka_raven`: Raven assembly followed by Medaka consensus polishing for Oxford Nanopore reads.
+
+You can also change the default assembler list in the `tool.denovo` section of [pipeline/config/config.yaml](../pipeline/config/config.yaml):
 
 ```yaml
 tool:
@@ -54,31 +85,26 @@ tool:
     # - 'flye'
 ```
 
-### When to use each option
-
-- `spades`: best option for Illumina metagenomic and metatranscriptomic reads. It is the current default and tends to recover viral contigs well.
-- `megahit`: faster and useful when you prioritize speed over maximum assembly quality.
-- `flye`: recommended for long-read data (Nanopore/PacBio). Not the best choice for short Illumina reads.
-- `raven`: another long-read assembler, usually simpler and faster, but with quality trade-offs.
+---
 
 ## 4. Tuning SPAdes
 
-If you choose SPAdes, there are two important settings to adjust:
+If you use SPAdes, two settings in [pipeline/config/config.yaml](../pipeline/config/config.yaml) control its behavior:
 
-### 4.1 Algorithm mode
+### 4.1 Algorithm Mode
 
-In the `spades.algorithm` section you define the assembly mode:
+In the `spades.algorithm` section:
 
 ```yaml
 spades:
   algorithm:
-    - '--meta'
+    - '--rnaviral'
 ```
 
-- `--meta`: recommended for metagenomic data.
-- `--isolate`: can work better for isolate samples or high-coverage datasets.
+- `--rnaviral` or `--meta`: recommended for viral metatranscriptomic and metagenomic datasets.
+- `--isolate`: suitable for high-coverage viral isolate sequencing.
 
-### 4.2 K-mer sizes
+### 4.2 K-mer Sizes
 
 The `spades.kmer` section defines the k-mer sizes used by SPAdes:
 
@@ -88,22 +114,24 @@ spades:
     - 'auto'
 ```
 
-- `auto`: the simplest option and usually a good starting point.
-- Explicit values like `21`, `33`, `55` or combinations such as `21_33_55` can be used for more specific tests.
+- `auto`: automatic k-mer selection based on read length (recommended starting point).
+- Explicit values like `21`, `33`, `55` or combinations such as `21_33_55` can be configured for targeted evaluations.
 
-## 5. Long-read assembly settings
+---
 
-If you are working with long-read data, prefer `flye` or `raven` instead of SPAdes.
+## 5. Long-Read Assembly Settings
 
-In [config/config.yaml](../config/config.yaml), you can set the Flye read type:
+When working with long-read data (`--assembler flye`, `raven`, `medaka_flye`, or `medaka_raven`), you can configure the Flye read type and Medaka model in [pipeline/config/config.yaml](../pipeline/config/config.yaml):
 
 ```yaml
 flye:
   type: "nano-corr"
+
+medaka:
+  model: "r941_min_hac_g507"
 ```
 
-You can change it to one of:
-
+Supported `flye.type` values:
 - `pacbio-raw`
 - `pacbio-corr`
 - `pacbio-hifi`
@@ -111,27 +139,31 @@ You can change it to one of:
 - `nano-corr`
 - `nano-hq`
 
-## 6. Adjusting downstream parameters
+---
 
-Besides fastp and the assembler, other parameters can significantly affect results:
+## 6. Adjusting Downstream Parameters
 
-- `diamond.min_contig_len`: minimum contig length for DIAMOND annotation.
-- `diamond.evalue`: e-value threshold for alignments.
-- `kraken2.confidence`: classification confidence threshold for Kraken2.
-- `palm_annot.minscore`: score threshold for RdRp candidate detection.
+Other key parameters in [pipeline/config/config.yaml](../pipeline/config/config.yaml) include:
 
-## 7. Recommended workflow to start
+- `diamond.min_contig_len`: minimum contig length (bp) retained before DIAMOND annotation (default: `250`).
+- `diamond.evalue`: E-value threshold for DIAMOND alignments (default: `1e-3`).
+- `kraken2.confidence`: classification confidence threshold for Kraken2 (default: `0.2`).
+- `palm_annot.minscore`: minimum catalytic motif score threshold for RdRp candidate detection in the Dark Matter module (default: `50`).
 
-1. Start with the default values in [config/config.yaml](../config/config.yaml).
-2. If the read quality is poor, tune fastp first.
-3. If you have short Illumina reads, test `spades` first.
-4. If you have long-read data, use `flye` or `raven`.
-5. Compare results and change one parameter at a time.
+---
 
-## 8. Example run after editing configuration
+## 7. Example Run After Editing Configuration
 
 ```bash
-bash DeepVir.sh --input <DIR> --output <DIR> --profile local --diamond --darkmatter
+python DeepVir.py \
+    --input data \
+    --output results \
+    --profile local \
+    --assembly \
+    --assembler spades \
+    --diamond \
+    --darkmatter \
+    --jobs 8
 ```
 
-If you are running on a cluster, change the profile to `profile_slurm`.
+If you are running on an HPC cluster, change `--profile local` to `--profile profile_slurm`.

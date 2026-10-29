@@ -1,10 +1,7 @@
 name: kraken_biom
 channels:
-  - bioconda
   - conda-forge
+  - bioconda
   - nodefaults
 dependencies:
-  - python=3.9
-  - pip
-  - pip:
-    - kraken-biom==1.0.1
+  - h5py

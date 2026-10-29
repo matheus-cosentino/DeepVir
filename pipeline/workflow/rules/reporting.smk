@@ -30,7 +30,7 @@ rule generate_assembly_stats:
         json = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_{tool}_assembly_stats.json"),
         tsv = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_{tool}_assembly_stats.tsv")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "generate_assembly_stats_{tool}_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "generate_assembly_stats_{tool}_{sample}.log")
     conda:
         CORE
     script:
@@ -48,7 +48,7 @@ rule generate_diamond_stats:
         json = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_{tool}_diamond_stats.json"),
         tsv = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_{tool}_diamond_stats.tsv")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "generate_diamond_stats_{tool}_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "generate_diamond_stats_{tool}_{sample}.log")
     conda:
         CORE
     script:
@@ -64,7 +64,7 @@ rule generate_diamond_reads_stats:
         json = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_reads_diamond_stats.json"),
         tsv = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_reads_diamond_stats.tsv")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "generate_diamond_reads_stats_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "generate_diamond_reads_stats_{sample}.log")
     conda:
         CORE
     script:
@@ -82,7 +82,7 @@ rule generate_kraken2_stats:
         json = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_{tool}_kraken2_stats.json"),
         tsv = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_{tool}_kraken2_stats.tsv")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "generate_kraken2_stats_{tool}_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "generate_kraken2_stats_{tool}_{sample}.log")
     conda:
         CORE
     script:
@@ -99,7 +99,7 @@ rule generate_kraken2_reads_stats:
         json = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_reads_kraken2_stats.json"),
         tsv = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_reads_kraken2_stats.tsv")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "generate_kraken2_reads_stats_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "generate_kraken2_reads_stats_{sample}.log")
     conda:
         CORE
     script:
@@ -117,7 +117,7 @@ rule generate_darkmatter_stats:
         json = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_{tool}_darkmatter_stats.json"),
         tsv = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_{tool}_darkmatter_stats.tsv")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "generate_darkmatter_stats_{tool}_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "generate_darkmatter_stats_{tool}_{sample}.log")
     conda:
         CORE
     script:
@@ -145,7 +145,7 @@ rule multiqc_aggregate:
     conda:
         MULTIQC    
     log:
-        os.path.join(OUT_DIR, "log", "multiqc_agregate.log")
+        os.path.join(LOG_DIR, "workflow", "multiqc_agregate.log")
     shell:
         """
         multiqc \
@@ -176,7 +176,7 @@ rule multiqc_sample:
         extra = "--title 'Report for {sample}'",
         outdir = lambda w, output: os.path.dirname(output.report)
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "multiqc.log")
+        os.path.join(LOG_DIR, "{sample}", "multiqc.log")
     shell:
         """
         multiqc \

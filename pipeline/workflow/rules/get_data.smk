@@ -31,7 +31,7 @@ rule download_sra_data_paired:
         r1 = os.path.join(config["data_dir"], "{sample}_1.fastq.gz"),
         r2 = os.path.join(config["data_dir"], "{sample}_2.fastq.gz")
     log:
-        os.path.join(config["output_dir"], "{sample}", "log", "{sample}_download.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_download.log")
     benchmark:
         os.path.join(config["output_dir"], "benchmarks", "download_sra", "{sample}.tsv")
     conda:
@@ -54,6 +54,7 @@ rule download_sra_data_paired:
         vdb-validate {wildcards.sample}
 
         echo "Step 3: Running fasterq-dump from local SRA file..."
+        rm -rf {params.tmpdir}
         mkdir -p {params.tmpdir}
         fasterq-dump {wildcards.sample} \
             --split-files \
@@ -63,15 +64,19 @@ rule download_sra_data_paired:
             --skip-technical
 
         echo "Step 4: Compressing with pigz (faster) or gzip..."
-        # Se 'pigz' estiver disponível no cluster, use-o para ganhar tempo
-        pigz -p {threads} "{params.tmpdir}/{wildcards.sample}_1.fastq" || gzip "{params.tmpdir}/{wildcards.sample}_1.fastq"
-        pigz -p {threads} "{params.tmpdir}/{wildcards.sample}_2.fastq" || gzip "{params.tmpdir}/{wildcards.sample}_2.fastq"
+        if command -v pigz >/dev/null 2>&1; then
+            pigz -f -p {threads} "{params.tmpdir}/{wildcards.sample}_1.fastq"
+            pigz -f -p {threads} "{params.tmpdir}/{wildcards.sample}_2.fastq"
+        else
+            gzip -f "{params.tmpdir}/{wildcards.sample}_1.fastq"
+            gzip -f "{params.tmpdir}/{wildcards.sample}_2.fastq"
+        fi
         
         echo "Step 5: Moving files and cleaning up..."
         mv "{params.tmpdir}/{wildcards.sample}_1.fastq.gz" {output.r1}
         mv "{params.tmpdir}/{wildcards.sample}_2.fastq.gz" {output.r2}
         
-        # Remove o arquivo .sra baixado para economizar espaço no diretório do NCBI
+        # Remove the downloaded .sra file to save disk space in NCBI directory
         rm -rf ~/ncbi/public/sra/{wildcards.sample}.sra
         rm -rf {params.tmpdir}
         """
@@ -84,7 +89,7 @@ rule download_sra_single:
     output:
         r1 = os.path.join(config["data_dir"], "{sample}_1.fastq.gz")
     log:
-        os.path.join(config["output_dir"], "{sample}", "log", "{sample}_download_single.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_download_single.log")
     benchmark:
         os.path.join(config["output_dir"], "benchmarks", "download_sra_single", "{sample}.tsv")
     conda:
@@ -109,11 +114,17 @@ rule download_sra_single:
         # Logic to handle naming variations (sample.fastq vs sample_1.fastq)
         # Note: We must compress BEFORE moving to .gz output
         
+        if command -v pigz >/dev/null 2>&1; then
+            COMPRESS="pigz -f -p {resources.threads}"
+        else
+            COMPRESS="gzip -f"
+        fi
+
         if [ -f "{params.tmpdir}/{wildcards.sample}_1.fastq" ]; then
-            gzip "{params.tmpdir}/{wildcards.sample}_1.fastq"
+            $COMPRESS "{params.tmpdir}/{wildcards.sample}_1.fastq"
             mv "{params.tmpdir}/{wildcards.sample}_1.fastq.gz" {output.r1}
         elif [ -f "{params.tmpdir}/{wildcards.sample}.fastq" ]; then
-            gzip "{params.tmpdir}/{wildcards.sample}.fastq"
+            $COMPRESS "{params.tmpdir}/{wildcards.sample}.fastq"
             mv "{params.tmpdir}/{wildcards.sample}.fastq.gz" {output.r1}
         fi
 

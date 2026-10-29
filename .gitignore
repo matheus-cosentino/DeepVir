@@ -1,44 +1,42 @@
 # Ignore results directory
 results/
 
+# Ignore centralized execution logs (except .gitkeep if present)
+logs/*.log
+logs/*.yaml
+logs/*/
+
 # Ignore raw data
 raw_data/
-
-# Ignore resources directory
-resources/database/
-resources/megan/
-resources/taxonomy/
-resources/krona/
-resources/rvdb/
-resources/diamond/
-resources/kraken2/
-db/
-
-# Ignore data directory
 data/contigs/
 data/raw_data/
 data/
 
-# Ignore .snakemake binaries
-.snakemake/
+# Ignore resources databases inside pipeline/resources/
+pipeline/resources/database/
+pipeline/resources/megan/
+pipeline/resources/taxonomy/
+pipeline/resources/krona/
+pipeline/resources/rvdb/
+pipeline/resources/diamond/
+pipeline/resources/kraken2/
+db/
 
-# ignore paper folder
+# Ignore .snakemake working cache
+.snakemake/
+pipeline/.snakemake/
+
+# Ignore paper & test folders
 paper/
-#ignore slurm tests#
-#slurm_scripts/*
-##slurm_scripts/crab_novavir.slurm
-#slurm_scripts/itro_novavir.slurm
-#slurm_scripts/crab_novavir.slurm
+test_run/
 
 # Python cache
-workflow/scripts/__pycache__/*
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
-#Walkthrough.md
 
-#sobreescritor de run
+# Dynamic run overrides
 run_overrides.yaml
+pipeline/run_overrides.yaml
 .snakemake-workflow.yaml
-
-

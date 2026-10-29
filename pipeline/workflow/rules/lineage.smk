@@ -27,7 +27,7 @@ rule download_prot:
     nodes = os.path.join(TAXONOMY_DIR[0], "nodes.dmp"),
     names = os.path.join(TAXONOMY_DIR[0], "names.dmp")
   log:
-    os.path.join(OUT_DIR, "log", "tax_download_mapping.log")
+    os.path.join(LOG_DIR, "workflow", "tax_download_mapping.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "download_prot", "taxonomy.tsv")
   params:
@@ -64,7 +64,7 @@ rule map_accession_to_taxid:
     shadow: 
       "minimal"
     log:
-      os.path.join(OUT_DIR, "{sample}", "log", "{sample}_{tool}_map_acc_prot.log")
+      os.path.join(LOG_DIR, "{sample}", "{sample}_{tool}_map_acc_prot.log")
     benchmark:
       os.path.join(OUT_DIR, "benchmarks", "map_accession_to_taxid", "{sample}_{tool}.tsv")
     conda:
@@ -90,7 +90,7 @@ rule split_hits_by_taxid:
     params:
         header="qseqid\tsseqid\tpident\tlength\tmismatch\tgapopen\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\ttaxid"
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "{sample}_{tool}_split_hits_by_taxid.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_{tool}_split_hits_by_taxid.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "split_hits_by_taxid", "{sample}_{tool}.tsv")
     conda:
@@ -133,7 +133,7 @@ rule append_lineage:
         lineage_header="Lineage\tCelular\tAcelular\tRealm\tKingdom\tPhylum\tClass\tOrder\tFamily\tGenus\tSpecies",
         nodes=os.path.join(TAXONOMY_DIR[0], "nodes.dmp")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "{sample}_{tool}_diamond_lineages.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_{tool}_diamond_lineages.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "append_lineage", "{sample}_{tool}.tsv")
     conda:

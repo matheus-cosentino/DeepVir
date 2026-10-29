@@ -18,6 +18,9 @@
 ### Main output directory
 output_dir: "results"
 
+### Centralized execution logs directory
+log_dir: "logs"
+
 ###Add path to directory of files of interest
 data_dir: "data"
 
@@ -27,7 +30,7 @@ data_dir: "data"
 workdir: "DeepVir"
 
 ### File with sample names of interest to be wildcards of sample
-sample_list: "accessions.txt"
+sample_list: "data/accessions.txt"
 
 ### Modules of Analysis to be requested
 modules: 

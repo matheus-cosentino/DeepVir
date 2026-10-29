@@ -20,7 +20,7 @@ rule get_rvdb:
     hmm = os.path.join(RVDB_DIR[0], "U-RVDBv31.0-prot.hmm.xz"),
     sql =  os.path.join(RVDB_DIR[0], "U-RVDBv31.0-prot-hmm.sqlite.xz")
   log:
-    os.path.join(OUT_DIR, "log", "get_rvdb.log")
+    os.path.join(LOG_DIR, "workflow", "get_rvdb.log")
   conda:
     DOWNLOAD
   shell:
@@ -41,7 +41,7 @@ rule prepare_rvdb:
     i3 = os.path.join(RVDB_DIR[0], "U-RVDBv31.0-prot.hmm.h3f"),
     i4 = os.path.join(RVDB_DIR[0], "U-RVDBv31.0-prot.hmm.h3p")
   log:
-    os.path.join(OUT_DIR, "log", "prepare_rvdb.log")
+    os.path.join(LOG_DIR, "workflow", "prepare_rvdb.log")
   conda:
     HMMER
   shell:
@@ -61,7 +61,7 @@ rule rvdb_search:
   params:
     evalue=config['hmmscan']['evalue']
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "rvdb_search_{tool}_{sample}.log")
+    os.path.join(LOG_DIR, "{sample}", "rvdb_search_{tool}_{sample}.log")
   conda:
     HMMER
   shell:
@@ -76,7 +76,7 @@ rule rvdb_summarize:
   output:
     csv = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_RVDB_Summary.csv")
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "rvdb_summarize_{tool}_{sample}.log")
+    os.path.join(LOG_DIR, "{sample}", "rvdb_summarize_{tool}_{sample}.log")
   conda:
     CORE
   script:
@@ -91,7 +91,7 @@ rule rvdb_validate_structural:
     raw_rvdb_orfs    = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_structural_Orfs.fasta"),
     raw_rvdb_contigs = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_structural_contigs.fasta")
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "{sample}_rvdb_validate_structural_{tool}.log")
+    os.path.join(LOG_DIR, "{sample}", "{sample}_rvdb_validate_structural_{tool}.log")
   conda:
     REPORT
   script:
@@ -106,7 +106,7 @@ rule rvdb_validate_pol:
     raw_rvdb_orfs    = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_pol_Orfs.fasta"),
     raw_rvdb_contigs = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_pol_contigs.fasta")
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "{sample}_rvdb_validate_pol_{tool}.log")
+    os.path.join(LOG_DIR, "{sample}", "{sample}_rvdb_validate_pol_{tool}.log")
   conda:
     REPORT
   script:

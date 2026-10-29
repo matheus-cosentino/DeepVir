@@ -28,7 +28,7 @@ rule krona_update_taxonomy:
     conda:
         KRONA
     log:
-        os.path.join(OUT_DIR, "log", "krona_update_taxonomy.log")
+        os.path.join(LOG_DIR, "workflow", "krona_update_taxonomy.log")
     shell:
         """
         echo "[INFO] Configurando diretórios..." > {log}
@@ -64,7 +64,7 @@ rule krona_kraken2:
     conda:
         KRONA
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "krona_kraken2_{tool}_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "krona_kraken2_{tool}_{sample}.log")
     shell:
         """
         ktImportTaxonomy \
@@ -86,7 +86,7 @@ rule krona_reads_kraken:
     params:
         tax_dir=KRONA_DB_DIR[0]    
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "krona_kraken_reads_{read_type}_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "krona_kraken_reads_{read_type}_{sample}.log")
     shell:
         """
         ktImportTaxonomy \
@@ -109,7 +109,7 @@ rule krona_diamond:
     params:
         tax_dir = lambda w, input: os.path.dirname(input.tax_tab)
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "krona_diamond_{tool}_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "krona_diamond_{tool}_{sample}.log")
     shell:
         """
         echo "[INFO] Executing ktImportTaxonomy..." > {log}
@@ -135,7 +135,7 @@ rule krona_diamond_reads:
     params:
         tax_dir = lambda w, input: os.path.dirname(input.tax_tab)
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "krona_diamond_reads_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "krona_diamond_reads_{sample}.log")
     shell:
         """
         echo "[INFO] Executing ktImportTaxonomy for Diamond Reads..." > {log}

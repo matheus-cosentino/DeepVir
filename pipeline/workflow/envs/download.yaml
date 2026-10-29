@@ -7,3 +7,4 @@ dependencies:
   - sra-tools=3.2.1
   - wget=1.25.0
   - zstd=1.5.7
+  - pigz>=2.8

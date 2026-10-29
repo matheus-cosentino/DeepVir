@@ -24,7 +24,7 @@ if config["modules"].get("reads_diamond", False):
     params:
       dir = lambda w, output: os.path.dirname(output.db)
     log:
-      os.path.join(OUT_DIR, "log", "megan6_download_mapper.log")
+      os.path.join(LOG_DIR, "workflow", "megan6_download_mapper.log")
     conda:
       DOWNLOAD
     shell:
@@ -42,7 +42,7 @@ if config["modules"].get("reads_diamond", False):
     output:
       daa = os.path.join(OUT_DIR, "{sample}", "megan_reads", "{sample}_reads_report_meganized.daa")
     log:
-      os.path.join(OUT_DIR, "{sample}", "log", "meganizer_{sample}.log")
+      os.path.join(LOG_DIR, "{sample}", "meganizer_{sample}.log")
     conda:
       MEGAN
     shell:
@@ -72,7 +72,7 @@ if config["modules"].get("reads_diamond", False):
     output:
       summary = os.path.join(OUT_DIR, "{sample}", "megan_reads", "{sample}_reads_summary.megan")
     log:
-      os.path.join(OUT_DIR, "{sample}", "log", "daa2info_{sample}.log")
+      os.path.join(LOG_DIR, "{sample}", "daa2info_{sample}.log")
     conda:
       MEGAN
     shell:

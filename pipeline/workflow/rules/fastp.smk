@@ -35,12 +35,12 @@ rule fastp_paired:
         html = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_paired.html"),
         json= os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_paired.json")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "{sample}_fastp_paired.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_fastp_paired.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "fastp_paired", "{sample}.tsv")
     params:
-        length_required=config['fastp']['length_required'],
-        quality=config['fastp']['qualified_quality_phred']
+        length_required=lambda wc: config['fastp']['length_required'][0] if isinstance(config['fastp']['length_required'], (list, tuple)) else config['fastp']['length_required'],
+        quality=lambda wc: config['fastp']['qualified_quality_phred'][0] if isinstance(config['fastp']['qualified_quality_phred'], (list, tuple)) else config['fastp']['qualified_quality_phred']
     conda:
         FASTP
     shell:
@@ -69,12 +69,12 @@ rule fastp_unpaired:
         html= os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_unp.html"),      
         json= os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_unp.json")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "{sample}_fastp_unpaired.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_fastp_unpaired.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "fastp_unpaired", "{sample}.tsv")
     params:
-        length_required=config['fastp']['length_required'],
-        quality=config['fastp']['qualified_quality_phred']
+        length_required=lambda wc: config['fastp']['length_required'][0] if isinstance(config['fastp']['length_required'], (list, tuple)) else config['fastp']['length_required'],
+        quality=lambda wc: config['fastp']['qualified_quality_phred'][0] if isinstance(config['fastp']['qualified_quality_phred'], (list, tuple)) else config['fastp']['qualified_quality_phred']
     conda:
         FASTP
     shell:

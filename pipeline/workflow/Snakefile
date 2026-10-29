@@ -59,6 +59,7 @@ from scripts.functions import get_all_kraken_reports
 WORKDIR = config["workdir"]
 DATA = config["data_dir"]
 OUT_DIR = config["output_dir"]
+LOG_DIR = config.get("log_dir", _os.path.normpath(_os.path.join(_PROJECT_ROOT, "..", "logs")))
 KRONA_DB_DIR = [_os.path.join(_PROJECT_ROOT, p) for p in config["resources"]["krona"]]
 TAXONOMY_DIR = [_os.path.join(_PROJECT_ROOT, p) for p in config["resources"]["taxonomy"]]
 RVDB_DIR = [_os.path.join(_PROJECT_ROOT, p) for p in config["resources"]["rvdb"]]

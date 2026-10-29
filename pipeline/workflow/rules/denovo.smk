@@ -27,7 +27,7 @@ rule spades:
     output:
         contigs = os.path.join(OUT_DIR, "{sample}", "spades", "kmer_{kmer_val}", "contigs.fasta")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "kmer_{kmer_val}_spades_assembly.log")
+        os.path.join(LOG_DIR, "{sample}", "kmer_{kmer_val}_spades_assembly.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "spades", "{sample}_k{kmer_val}.tsv")
     params:
@@ -68,7 +68,7 @@ rule megahit:
     output:
         contigs = os.path.join(OUT_DIR, "{sample}", "megahit", "final.contigs.fa")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "meghit_assembly.log")
+        os.path.join(LOG_DIR, "{sample}", "meghit_assembly.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "megahit", "{sample}.tsv")
     params:
@@ -78,13 +78,19 @@ rule megahit:
         MEGAHIT_ENV
     shell:
         """
+        tmp_megahit_out=$(mktemp -d -p "{resources.tmpdir}" megahit_{wildcards.sample}_XXXXXX)
+        mkdir -p "{params.outdir}"
+        
         megahit \
           {params.input_args} \
-          -o {params.outdir} \
+          --tmp-dir "{resources.tmpdir}" \
+          -o "$tmp_megahit_out" \
           -t {resources.threads} \
           -f \
           > {log} 2>&1
-             
+        
+        cp -rf "$tmp_megahit_out"/* "{params.outdir}/"
+        rm -rf "$tmp_megahit_out"
         """
 
 
@@ -102,7 +108,7 @@ rule flye:
     output:
         contigs = os.path.join(OUT_DIR, "{sample}", "flye", "assembly.fasta")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "flye_assembly.log")
+        os.path.join(LOG_DIR, "{sample}", "flye_assembly.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "flye", "{sample}.tsv")
     params:
@@ -138,7 +144,7 @@ rule raven:
     output:
         contigs = os.path.join(OUT_DIR, "{sample}", "raven", "assembly.fasta")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "raven_assembly.log")
+        os.path.join(LOG_DIR, "{sample}", "raven_assembly.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "raven", "{sample}.tsv")
     conda:
@@ -164,7 +170,7 @@ rule medaka_polish:
         model = config["medaka_model"],
         outdir = lambda w, output: os.path.dirname(output.consensus)
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "medaka_{assembler}.log")
+        os.path.join(LOG_DIR, "{sample}", "medaka_{assembler}.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "medaka_polish", "{sample}_{assembler}.tsv")
     conda:

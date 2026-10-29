@@ -28,7 +28,7 @@ rule kraken2_contigs:
         db = _os.path.join(_PROJECT_ROOT, config["resources"]["kraken2"][0]),        
         confidence = config["kraken2"]["confidence"]
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "kraken2_contigs_{tool}_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "kraken2_contigs_{tool}_{sample}.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "kraken2_contigs", "{sample}_{tool}.tsv")
     conda:
@@ -56,7 +56,7 @@ rule kraken_biom_contig:
     output:
         biom = os.path.join(OUT_DIR, "{sample}", "kraken2_{tool}", "{sample}_{tool}_contig_biom.txt"),
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "kraken2_contigs_{tool}_{sample}_biom.log")
+        os.path.join(LOG_DIR, "{sample}", "kraken2_contigs_{tool}_{sample}_biom.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "kraken_biom_contig", "{sample}_{tool}.tsv")
     params:
@@ -90,7 +90,7 @@ rule kraken2_reads_paired:
       confidence=config["kraken2"]["confidence"],
       int_file=temp(os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}.fastq.gz"))
     log:
-      os.path.join(OUT_DIR, "{sample}", "log", "kraken2_paired_reads_{sample}.log")
+      os.path.join(LOG_DIR, "{sample}", "kraken2_paired_reads_{sample}.log")
     benchmark:
       os.path.join(OUT_DIR, "benchmarks", "kraken2_reads_paired", "{sample}.tsv")
     conda:
@@ -120,7 +120,7 @@ rule kraken2_reads_unpaired:
       db=_os.path.join(_PROJECT_ROOT, config["resources"]["kraken2"][0]),        
       confidence=config["kraken2"]["confidence"]
     log:
-      os.path.join(OUT_DIR, "{sample}", "log", "kraken2_paired_reads_{sample}.log")
+      os.path.join(LOG_DIR, "{sample}", "kraken2_paired_reads_{sample}.log")
     benchmark:
       os.path.join(OUT_DIR, "benchmarks", "kraken2_reads_unpaired", "{sample}.tsv")
     conda:
@@ -148,7 +148,7 @@ rule kraken_biom_reads:
       minimum=config["kraken_biom"]["min"],
       out_format=config["kraken_biom"]["format"]
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "kraken2_biom_{paired}_reads_{sample}.log")
+        os.path.join(LOG_DIR, "{sample}", "kraken2_biom_{paired}_reads_{sample}.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "kraken_biom_reads", "{sample}_{paired}.tsv")
     conda:
@@ -174,7 +174,7 @@ rule kraken_biom_merge_all:
     conda:
         R_RAREFACTION
     log:
-        os.path.join(OUT_DIR, "log", "kraken_biom_merge_all.log")
+        os.path.join(LOG_DIR, "workflow", "kraken_biom_merge_all.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "kraken_biom_merge_all", "all_samples.tsv")
     shell:
@@ -192,6 +192,6 @@ rule kraken_rarefaction_plot:
     conda:
         R_RAREFACTION
     log:
-        os.path.join(OUT_DIR, "log", "kraken_rarefaction_plot.log")
+        os.path.join(LOG_DIR, "workflow", "kraken_rarefaction_plot.log")
     script:
         "../scripts/plot_rarefaction.R"

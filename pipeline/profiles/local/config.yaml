@@ -1,0 +1,69 @@
+###################################################################################
+#                              Local Profile                              #
+#                         MSc. Matheus Cosentino                                  #
+#                         version: 1.0  |  09.2026                                #
+###################################################################################
+
+######################
+# --- 1. Params --- #
+#####################
+jobs: 2
+restart-times: 2
+keep-going: true
+rerun-incomplete: true
+use-conda: true
+show-failed-logs: true
+
+#######################################
+# --- 2. Default Generic Resources --- #
+#######################################
+default-resources:
+  threads: 1
+  mem_mb: 2000
+
+#######################################
+# --- 3. Specific Rule Resources  --- #
+#######################################
+set-resources:
+  spades:
+    mem_mb: 8000
+    threads: 4
+  megahit:
+    mem_mb: 8000
+    threads: 4
+  flye:
+    mem_mb: 8000
+    threads: 4
+  diamond_blastx_contigs:
+    mem_mb: 8000
+    threads: 4
+  diamond_blastx_reads:
+    mem_mb: 8000
+    threads: 4
+  reads_diamond_daa:
+    mem_mb: 8000
+    threads: 4
+  map_accession_to_taxid:
+    mem_mb: 8000
+    threads: 4
+  basta_search:
+    mem_mb: 8000
+    threads: 4
+  kraken2_contigs:
+    mem_mb: 8000
+    threads: 4
+  kraken2_reads_paired:
+    mem_mb: 8000
+    threads: 4
+  kraken2_reads_unpaired:
+    mem_mb: 8000
+    threads: 4
+  cd_hit:
+    mem_mb: 8000
+    threads: 4
+  rvdb_search:
+    mem_mb: 8000
+    threads: 4
+  krona_update_taxonomy:
+    mem_mb: 8000
+    threads: 4

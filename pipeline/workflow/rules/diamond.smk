@@ -25,7 +25,7 @@ rule filter_contigs_diamond:
   params:
     min_len = config["diamond"]["min_contig_len"]
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "filter_contigs_{tool}_{sample}.log")
+    os.path.join(LOG_DIR, "{sample}", "filter_contigs_{tool}_{sample}.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "filter_contigs_diamond", "{sample}_{tool}.tsv")
   conda:
@@ -51,7 +51,7 @@ rule diamond_blastx_contigs:
     block_size   = config["diamond"]["block_size"],
     index_chunks = config["diamond"]["index_chunks"]
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "diamond_{tool}_{sample}.log")
+    os.path.join(LOG_DIR, "{sample}", "diamond_{tool}_{sample}.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "diamond_blastx_contigs", "{sample}_{tool}.tsv")
   conda:
@@ -105,7 +105,7 @@ rule diamond_view_contigs:
   params:
     outfmt = config["diamond"]["outfmt"],
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "diamond_view_{tool}_{sample}.log")
+    os.path.join(LOG_DIR, "{sample}", "diamond_view_{tool}_{sample}.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "diamond_view_contigs", "{sample}_{tool}.tsv")
   conda:
@@ -141,7 +141,7 @@ rule diamond_blastx_reads:
     block_size    = config["diamond"]["block_size"],
     index_chunks  = config["diamond"]["index_chunks"]
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "diamond_reads_{sample}.log")
+    os.path.join(LOG_DIR, "{sample}", "diamond_reads_{sample}.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "diamond_blastx_reads", "{sample}.tsv")
   conda:
@@ -204,7 +204,7 @@ rule diamond_view_reads:
   params:
     outfmt = config["diamond"]["outfmt"],
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "diamond_view_reads_{sample}.log")
+    os.path.join(LOG_DIR, "{sample}", "diamond_view_reads_{sample}.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "diamond_view_reads", "{sample}.tsv")
   conda:

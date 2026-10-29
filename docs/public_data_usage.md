@@ -1,10 +1,12 @@
-# Working with Public Data
+# Working with Public Data (NCBI SRA)
 
-One of the advantages of the DeepVir pipeline is the possibility to easily incorporate publicly available data into the discovery pipeline, allowing for an easy process of discovering novel viruses within the public [SRA](https://www.ncbi.nlm.nih.gov/sra/).
+One of the key advantages of the DeepVir pipeline is the ability to seamlessly incorporate publicly available sequencing datasets from the [NCBI Sequence Read Archive (SRA)](https://www.ncbi.nlm.nih.gov/sra/) directly into your viral discovery workflow.
 
-For this, a line-separated file (e.g., `accession.txt`) must be provided, where each line corresponds to a Run identifier within SRA.
+## 1. Prepare the Accessions File
 
-```yaml
+Create a plain-text file (for example, `data/accessions.txt`) where each line corresponds to an SRA Run identifier (`SRR...`, `ERR...`, or `DRR...`):
+
+```text
 SRR25008973
 SRR25008974
 SRR25008975
@@ -12,15 +14,46 @@ SRR25008976
 SRR25008977
 ```
 
-Once the libraries of interest are given, run the following command to download the files.
+## 2. Download and Analyze SRA Samples with Python
 
-```shell
-bash DeepVir.sh --input <DIR> --output <DIR> --sra <FILE> 
+Pass the accessions file to `DeepVir.py` using the `--sra` flag along with your desired analysis modules:
+
+```bash
+python DeepVir.py \
+    --input data \
+    --output results \
+    --sra data/accessions.txt \
+    --profile local \
+    --assembly \
+    --assembler spades \
+    --diamond \
+    --kraken2 \
+    --darkmatter \
+    --jobs 8
 ```
 
-**Caution**:
-After the whole workflow is finished, the data will be kept. If you are interested in deleting the data after the run, use the following command:
+## 3. Download Only Mode (`--download-only`)
 
-```shell
-bash DeepVir.sh --input <DIR> --output <DIR> --sra <FILE> --remove-download 
+If you want to download and compress the SRA FASTQ files into your `--input` directory first and run the analysis later, add the `--download-only` flag:
+
+```bash
+python DeepVir.py \
+    --input data \
+    --output results \
+    --sra data/accessions.txt \
+    --download-only \
+    --jobs 4
+```
+
+## 4. Automatic Cleanup of Raw SRA Files (`--remove-download`)
+
+By default, downloaded `.fastq.gz` files are kept inside `<input>/sra/`. If disk space is limited and you want Snakemake to automatically delete the raw SRA reads once the workflow finishes, add `--remove-download`:
+
+```bash
+python DeepVir.py \
+    --input data \
+    --output results \
+    --sra data/accessions.txt \
+    --assembly --diamond --darkmatter \
+    --remove-download
 ```

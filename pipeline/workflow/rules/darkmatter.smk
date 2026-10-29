@@ -32,7 +32,7 @@ rule get_nohit_fasta:
   output:
     nohits = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_{tool}_nohit.fasta")
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "darkmatter_{tool}_{sample}_nohits.log")
+    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_nohits.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "get_nohit_fasta", "{sample}_{tool}.tsv")
   conda:
@@ -50,7 +50,7 @@ rule find_orfs:
   output:
     orfs = temp(os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta.temp"))
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "darkmatter_{tool}_{sample}_orfs.log")
+    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_orfs.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "find_orfs", "{sample}_{tool}.tsv")
   conda:
@@ -94,7 +94,7 @@ rule cd_hit:
   output:  
     orfs = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta")
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "darkmatter_{tool}_{sample}_cdhit.log")
+    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_cdhit.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "cd_hit", "{sample}_{tool}.tsv")
   conda:
@@ -129,7 +129,7 @@ rule palm_annot:
   conda:
     PALM
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "darkmatter_{tool}_{sample}_palmannot.log")  
+    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_palmannot.log")  
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "palm_annot", "{sample}_{tool}.tsv")
   script:
@@ -147,7 +147,7 @@ rule fev2tsv_single:
   conda:
     PALM
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "darkmatter_{tool}_{sample}_fev2tsv.log")
+    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_fev2tsv.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "fev2tsv_single", "{sample}_{tool}.tsv")
   script:
@@ -168,7 +168,7 @@ rule report_summarize:
         out_dir = lambda w, output: os.path.dirname(output.html),
         logos = os.path.join(RESOURCES_DIR, "logo")
     log:
-        os.path.join(OUT_DIR, "{sample}", "log", "{sample}_report_summarize_{tool}.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_report_summarize_{tool}.log")
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "report_summarize", "{sample}_{tool}.tsv")
     conda:
@@ -201,7 +201,7 @@ rule dm_validate:
     raw_rdrp    = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp_Orfs.fasta"),
     raw_contigs = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp_contigs.fasta")
   log:
-    os.path.join(OUT_DIR, "{sample}", "log", "{sample}_dm_validate_{tool}.log")
+    os.path.join(LOG_DIR, "{sample}", "{sample}_dm_validate_{tool}.log")
   benchmark:
     os.path.join(OUT_DIR, "benchmarks", "dm_validate", "{sample}_{tool}.tsv")
   conda:

@@ -10,7 +10,9 @@ dependencies:
   - entrez-direct=24.0
   - snakemake-executor-plugin-slurm=2.0.0
   - python=3.13
+  - tk=*=xft_*          # Xft/FreeType build required for scalable anti-aliased fonts in Desktop GUI
+  - fonts-conda-ecosystem
   - pandas=2.3.2
   - biopython=1.86
   - graphviz=14.1.2
-  - yappi             # required by snakemake 9.x for profiling support
+  - yappi               # required by snakemake 9.x for profiling support

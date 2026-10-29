@@ -1,35 +1,54 @@
 # DeepVir: Reproducible Viral Discovery Pipeline
 
+[![Python](https://img.shields.io/badge/python-≥3.8-blue.svg)](https://www.python.org/)
 [![Snakemake](https://img.shields.io/badge/snakemake-≥9.0.0-brightgreen.svg)](https://snakemake.readthedocs.io)
-[![Conda-Env](https://img.shields.io/badge/conda-env-green.svg)](workflow/envs/DeepVir.yaml)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Conda-Env](https://img.shields.io/badge/conda-env-green.svg)](pipeline/workflow/envs/DeepVir.yaml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-yellow.svg)](docs/LICENSE)
 
 <p align="center">
-  <img src="resources/logo/DeepVir_Logo.png" width="300" alt="DeepVir Logo">
+  <img src="pipeline/resources/logo/DeepVir_Logo.png" width="300" alt="DeepVir Logo">
 </p>
 
 > [!TIP]
-> **New to DeepVir?** Start with our **[🚀 Local Usage & 1st Time Setup](docs/local_use.md)** to quickly set up Conda, testing databases, and run the pipeline locally.
+> **New to DeepVir?** Start with our **[Local Usage & 1st Time Setup](docs/local_use.md)** to quickly set up Conda, prepare lightweight test databases, and run the pipeline via the **Python CLI** or **1-Click Desktop GUI**.
 
 ---
 
 ## Table of Contents
 
 - [Introduction](#introduction)
+- [Repository Architecture](#repository-architecture)
 - [Pipeline Presentation](#pipeline-presentation)
 - [Requirements & Dependencies](#requirements--dependencies)
-- [Installation](#installation)
+- [Quick Start & Execution (Python)](#quick-start--execution-python)
 - [Tutorials & Guides](#tutorials--guides)
-- [Contributing](#contributing)
-- [License](#license)
-- [Author](#author)
 - [Contributing](#contributing)
 - [License](#license)
 - [Author](#author)
 
 ## Introduction
 
-DeepVir is a comprehensive and scalable Snakemake workflow for the detection of novel viruses within High-Throughput Sequencing (HTS) data. The pipeline is designed to work with both short-read (Illumina) and long-read (Nanopore/PacBio) metagenomic and transcriptomic data.
+**DeepVir** is a comprehensive and scalable Snakemake workflow orchestrated in **pure Python** for the detection of novel viruses within High-Throughput Sequencing (HTS) data. The pipeline works seamlessly with both short-read (Illumina) and long-read (Nanopore/PacBio) metagenomic and metatranscriptomic datasets across **Linux**, **macOS** (Intel & Apple Silicon), **Windows (via WSL2 bridge)**, and **HPC (Slurm)** clusters.
+
+## Repository Architecture
+
+DeepVir is organized into three main directories plus root launchers:
+
+```text
+DeepVir/
+├── DeepVir.py                  # Universal Cross-Platform Python Executor (CLI + GUI + WSL Bridge)
+├── DeepVir_gui.bat             # 1-Click Desktop Launcher for Windows (with WSL fallback)
+├── DeepVir_gui.command         # 1-Click Desktop Launcher for macOS (Finder)
+├── DeepVir_gui.sh              # 1-Click Desktop Launcher for Linux / WSL
+├── pipeline/                   # 1. Pipeline Backend & GUI Engine
+│   ├── config/                 # Global workflow parameters (config.yaml)
+│   ├── gui/                    # Interactive Tkinter Desktop Dashboard (deepvir_gui.py)
+│   ├── profiles/               # Snakemake execution profiles (local, profile_slurm)
+│   ├── resources/              # Databases, HMM models (PalmAnnot), and logos
+│   └── workflow/               # Snakemake Snakefile, modular rules (.smk), Conda envs & scripts
+├── docs/                       # 2. License & Markdown Documentation / Tutorials
+└── logs/                       # 3. Centralized Execution Logs, Rule Logs & Run Overrides
+```
 
 ## Pipeline Presentation
 
@@ -38,7 +57,7 @@ graph TD;
     A[Raw Reads fastq.gz] --> B(fastp Quality Control);
     B -->|Filtered Reads| C{Analysis Path};
     C -->|Read-Level Taxonomy| D[Kraken2, Diamond & MEGAN];
-    C -->|De Novo Assembly| E[SPAdes / Megahit / Flye];
+    C -->|De Novo Assembly| E[SPAdes / Megahit / Flye / Raven];
     
     E -->|Contigs| F(Diamond Annotation vs NR);
     E -->|Contigs| G(Kraken2 Annotation);
@@ -58,99 +77,115 @@ graph TD;
 ## Requirements & Dependencies
 
 ### Recommended Hardware Specs
-- **Memory (RAM)**: Minimum 32GB (for metaSPAdes assembly). 64GB+ recommended for large meta-transcriptomic datasets.
-- **CPU**: 8-16+ cores recommended.
-- **Disk Space**: At least 100GB+ available space to download external databases safely on local or HPC clusters.
+- **Memory (RAM)**: Minimum 32GB (for metaSPAdes/rnaviral assembly). 64GB+ recommended for large metatranscriptomic datasets.
+- **CPU**: 8–16+ cores recommended.
+- **Disk Space**: At least 100GB+ available space to store external databases on local machines or HPC clusters.
 
-### Dependencies (Conda & Databases)
-The pipeline uses Conda to manage its dependencies automatically.
-Database download and formatting (e.g. Kraken2 and Diamond NR) is required before running the pipeline. 
+### Dependencies (Python, Conda & Databases)
+- **Python 3.8+** (standard library only for the orchestrator `DeepVir.py`).
+- **Conda / Mamba / Miniforge**: DeepVir uses Snakemake's native `--use-conda` integration to automatically provision isolated tool environments defined in [`pipeline/workflow/envs/`](pipeline/workflow/envs).
+- **Databases**: See **[Local Usage & 1st Time Setup](docs/local_use.md)** for lightweight test databases and **[Full Databases Setup](docs/full_databases_setup.md)** for full production databases (Kraken2 & NCBI NR for DIAMOND).
 
-Please see our **[Launching Tutorial (1st Time)](docs/launching_tutorial_1st_time.md)** for detailed instructions on where to get these and how to format them.
+## Quick Start & Execution (Python)
 
-## Installation
-The `DeepVir.sh` script is responsible for managing the run, automatically downloading and creating the necessary Conda environments, as well as managing Conda versions for the pipeline to work.
+The [`DeepVir.py`](DeepVir.py) script is the universal Python entry point. It detects your operating system (Linux, macOS, or Windows with automatic WSL path translation), activates the `DeepVir` Conda environment, generates `logs/run_overrides.yaml`, and orchestrates Snakemake.
 
-### Reproducibility with Conda
-DeepVir uses Snakemake’s native Conda integration through `--use-conda`. This means that users do not need to manually install the required tools. The workflow automatically creates and uses the exact software environments defined in [workflow/envs](workflow/envs) for each analysis module, ensuring that results are reproducible across different machines and remain consistent even when system-wide software changes.
-
-1.  **Clone the repository:**
+### 1. Clone the repository
 
 ```bash
- git clone https://github.com/matheus-cosentino/DeepVir.git
- cd DeepVir
+git clone https://github.com/matheus-cosentino/DeepVir.git
+cd DeepVir
 ```
 
-2. **Verify installation:**
+### 2. Launch the Interactive Desktop GUI (1-Click or Python)
 
-```shell
- bash DeepVir.sh --help 
+- **Windows**: Double-click **`DeepVir_gui.bat`**
+- **macOS**: Double-click **`DeepVir_gui.command`**
+- **Linux**: Run **`./DeepVir_gui.sh`**
+- **Any OS via Python**:
+  ```bash
+  python DeepVir.py --gui
+  ```
+  *(Note: Running `python DeepVir.py` with no arguments also launches the Desktop GUI automatically.)*
+
+### 3. Command-Line Interface (CLI) Usage
+
+Verify the CLI options with:
+
+```bash
+python DeepVir.py --help
 ```
 
-The following must appear on your screen:
+```text
+usage: DeepVir.py [-h] [-v] [-g] [--input DIR] [--output DIR] [--sra FILE]
+                  [--jobs INT] [--profile NAME] [--temp-dir DIR]
+                  [--diamond_db FILE] [--kraken2_db DIR] [--reads-kraken]
+                  [--reads-diamond] [--assembly]
+                  [--assembler {spades,megahit,flye,raven,medaka_flye,medaka_raven}]
+                  [--fastp-length INT] [--fastp-quality INT] [--kraken2]
+                  [--diamond] [--darkmatter] [--rvdb] [--remove-download]
+                  [--download-only] [--dry-run]
 
- ```yaml
- DeepVir: Viral Metagenomics & 'Dark Matter' Discovery
+DeepVir: Viral Metagenomics & 'Dark Matter' Discovery (Universal Python Executor)
 
- Author: MSc. Matheus Cosentino 
- Version: 09.2026
+options:
+  -h, --help            show this help message and exit
+  -v, --version         Show version
+  -g, --gui             Launch interactive Desktop GUI (Python/Tkinter)
 
- Usage:
-  bash DeepVir.sh --input <DIR> --output <DIR> [OPTIONS]
+Input / Output & Execution:
+  --input DIR           Directory containing raw reads (.fastq.gz) or contigs (.fasta)
+  --output DIR          Directory where results will be saved
+  --sra FILE            Text file containing SRA Accession IDs for download
+  --jobs INT            Number of parallel jobs/cores (default: 15)
+  --profile NAME        Snakemake profile under pipeline/profiles/ (default: local)
+  --temp-dir DIR        Temporary scratch directory (default: /tmp)
 
- Required Arguments:
-   --input: <DIR>        Directory containing raw reads (.fastq.gz) or contigs (.fasta)
-   --output: <DIR>       Directory where results will be saved
+Database Overrides:
+  --diamond_db FILE     External Diamond database (.dmnd)
+  --kraken2_db DIR      External Kraken2 database directory (hash.k2d, opts.k2d, taxo.k2d)
 
- Optional Arguments:
-   --sra: <FILE>         Text file containing SRA Accession IDs for download.
-   --jobs: <INT>         Number of jobs (default: 15)
-  --profile: profiles/<PROFILE>      Snakemake profile directory under profiles/ (e.g., profiles/profile_slurm)
-   --temp-dir: <DIR>     Temporary directory (default: /tmp)
-
- Database Overrides (Use external DBs):
-   --diamond_db: <FILE>  External Diamond database (.dmnd).
-   --kraken2: <DIR>      External Kraken2 database directory (Must contain hash.k2d, opts.k2d, taxo.k2d)
-
- Module Toggles (Enable/Disable Analysis):
-   --reads-kraken: Enables taxonomic classification of raw reads using Kraken2.
-   --reads-diamond: Enables taxonomic classification of raw reads using DIAMOND and MEGAN LCA analysis.
-   --assembly: Enables *de novo* assembly of reads into contigs.
-   --kraken2: Enables taxonomic classification of assembled contigs using Kraken2.
-   --diamond: Enables taxonomic classification of assembled contigs using DIAMOND.
-   --darkmatter: Enables the "dark matter" module to search for RdRp signatures.
-   --rvdb: Enables optional RVDB validation on dark matter ORFs.
-   --remove-download: Removes SRA files after download.
- 
- Flags:
-   -h, --help           Show this help message
-   -v, --version        Show version
+Analysis Module Toggles:
+  --reads-kraken        Taxonomic classification of raw reads using Kraken2
+  --reads-diamond       Taxonomic classification of raw reads using DIAMOND + MEGAN
+  --assembly            Enable de novo assembly of reads into contigs
+  --assembler {spades,megahit,flye,raven,medaka_flye,medaka_raven}
+                        Select de novo assembler engine (default: spades)
+  --fastp-length INT    Minimum read length filter for fastp
+  --fastp-quality INT   Minimum Phred quality score for fastp
+  --kraken2             Taxonomic classification of assembled contigs using Kraken2
+  --diamond             Taxonomic classification of assembled contigs using DIAMOND
+  --darkmatter          Enable 'dark matter' module to search for RdRp signatures
+  --rvdb                Enable optional RVDB validation on dark matter ORFs
+  --remove-download     Remove SRA raw files after workflow completion
+  --download-only       Download SRA files only and stop before analysis
+  --dry-run             Run Snakemake in dry-run mode (preview DAG only)
 ```
 
 ## Tutorials & Guides
 
-To make it easier to navigate, we have divided the instructions into specific tutorials based on your usage:
+To make it easier to navigate, all documentation is available in [`docs/`](docs/):
 
-- **[Local Usage & 1st Time Setup](docs/local_use.md)**: Start here! Learn how to install Conda, prepare lightweight test databases, and run DeepVir on your local machine.
-- **[Full Databases Setup](docs/full_databases_setup.md)**: Instructions on how to download and properly format the full massive production databases for Kraken2 and Diamond (NR).
-- **[HPC (Slurm) Usage Guide](docs/hpc_use.md)**: Instructions for running the pipeline on an HPC cluster using the Slurm executor.
-- **[Advanced Configuration Tutorial](docs/advanced_tutorial.md)**: Practical guidance on assembler selection, SPAdes tuning, and long-read assembly choices.
-- **[Working with Public Data (SRA)](docs/public_data_usage.md)**: Learn how to incorporate publicly available sequencing runs (SRA) directly into the pipeline.
-- **[Expected Outputs](docs/expected_outputs.md)**: Learn about the file structure generated by the pipeline.
-- **[Pipeline Structure & DAGs](docs/structure_and_dags/workflow_structure.md)**: Detailed documentation of the directory structure and the execution DAGs.
+- **[Local Usage & 1st Time Setup](docs/local_use.md)**: Start here! Learn how to install Conda, prepare lightweight test databases, and run DeepVir locally with Python.
+- **[Desktop GUI Guide (Python)](docs/desktop_gui.md)**: Complete walkthrough of the interactive graphical interface, 1-click launchers, real-time console, and HTML report viewers.
+- **[Full Databases Setup](docs/full_databases_setup.md)**: Instructions on how to download and format full production databases for Kraken2 and DIAMOND (NR).
+- **[HPC (Slurm) Usage Guide](docs/hpc_use.md)**: Instructions for running the pipeline on an HPC cluster using `python3 DeepVir.py --profile profile_slurm`.
+- **[Advanced Configuration Tutorial](docs/advanced_tutorial.md)**: Practical guidance on `fastp` tuning, assembler selection, SPAdes settings, and long-read assembly parameters.
+- **[Working with Public Data (SRA)](docs/public_data_usage.md)**: Learn how to incorporate publicly available NCBI SRA runs directly into the pipeline.
+- **[Expected Outputs & Logs](docs/expected_outputs.md)**: Detailed reference of the files generated in `results/` and execution logs in `logs/`.
+- **[Pipeline Structure & DAGs](docs/structure_and_dags/workflow_structure.md)**: Detailed documentation of the 3-directory repository architecture and execution DAGs (EN / PT / FR).
 
-# Contributing
-Contributions are welcome! If you find a bug or have a suggestion for improvement, please open an issue!
+## Contributing
+Contributions are welcome! If you find a bug or have a suggestion for improvement, please open an issue.
 
-# License
-This project is licensed under the GNU General Public License v3.0.
+## License
+This project is licensed under the [GNU General Public License v3.0](docs/LICENSE).
 
-# Author
+## Author
 MSc. Matheus Cosentino
-
 
 ---
 <div align="center">
-  <img src="resources/logo/LDDV.png" width="200" alt="LDDV Logo" style="display: inline-block; margin-left: 10px;">
-  <img src="resources/logo/index.png" width="200" alt="Transvhmi Logo" style="display: inline-block; margin-left: 10px;">
+  <img src="pipeline/resources/logo/LDDV.png" width="200" alt="LDDV Logo" style="display: inline-block; margin-left: 10px;">
+  <img src="pipeline/resources/logo/index.png" width="200" alt="Transvhmi Logo" style="display: inline-block; margin-left: 10px;">
 </div>
