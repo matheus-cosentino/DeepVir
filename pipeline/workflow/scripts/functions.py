@@ -12,7 +12,7 @@
 #           ░░░░  ░░░░░ ░░░░░ ░       ░   ░░░ ░   ░                                #
 #                                                                                 #
 ###################################################################################
-#                         version: 1.0  |  09.2026                              #
+#                         version: 2.0  |  10.2026                              #
 ###################################################################################
 
 ###########################################
@@ -60,25 +60,44 @@ def get_final_outputs(include_multiqc=False):
     for sample, meta in SAMPLE_META.items():         
         if meta['mode'] == 'SRA':
             final_outputs.extend(meta['files'])
+
+  # 1b. Host Genome Filtering (BWA Depletion)
+  if MODULES.get("host_filter", False):
+    for sample, meta in SAMPLE_META.items():
+        if meta['mode'] != 'CONTIGS':
+            is_paired = (meta['mode'] == 'PAIRED') or (meta['mode'] == 'SRA' and len(meta['files']) == 2)
+            hf_rule = "host_filter_paired" if is_paired else "host_filter_unpaired"
+            final_outputs.append(f"{OUT_DIR}/{sample}/host_filter/{sample}_{hf_rule}_summary.txt")
+            final_outputs.append(f"{OUT_DIR}/{sample}/stats/{sample}_{hf_rule}_stats.tsv")
+            if is_paired:
+                final_outputs.append(f"{OUT_DIR}/{sample}/host_filter/{sample}_host_filter_paired_1.fastq.gz")
+                final_outputs.append(f"{OUT_DIR}/{sample}/host_filter/{sample}_host_filter_paired_2.fastq.gz")
+            else:
+                final_outputs.append(f"{OUT_DIR}/{sample}/host_filter/{sample}_host_filter_unpaired.fastq.gz")
   
-  # 2. Assembly (Mantemos igual, gera os arquivos físicos)
+  # 2. Assembly (Gera os arquivos físicos padronizados {sample}_{rule})
   if MODULES["assembly"]:  
     tools_list = MAPPER if isinstance(MAPPER, list) else [MAPPER]
     for tool_name in tools_list:
-        file_name = TOOL_OUTPUT_MAP.get(tool_name)
-        if not file_name:
+        if tool_name not in TOOL_OUTPUT_MAP:
              raise ValueError(f"Output filename not defined for tool: {tool_name}")
         
         if tool_name == "spades":
             kmer_list = config["spades"]["kmer"] 
             final_outputs.extend(expand(
-                "{output_dir}/{sample}/spades/kmer_{kmer_val}/{filename}", 
-                output_dir=OUT_DIR, sample=SAMPLE, filename=file_name, kmer_val=kmer_list
+                "{output_dir}/{sample}/spades/kmer_{kmer_val}/{sample}_spades_k{kmer_val}.fasta", 
+                output_dir=OUT_DIR, sample=SAMPLE, kmer_val=kmer_list
+            ))
+        elif tool_name.startswith("medaka_"):
+            assembler_base = tool_name.split("medaka_", 1)[1]
+            final_outputs.extend(expand(
+                "{output_dir}/{sample}/{tool}/{sample}_medaka_polish_{assembler}.fasta",
+                output_dir=OUT_DIR, sample=SAMPLE, tool=tool_name, assembler=assembler_base
             ))
         else:
             final_outputs.extend(expand(
-                "{output_dir}/{sample}/{tool}/{filename}", 
-                output_dir=OUT_DIR, sample=SAMPLE, tool=tool_name, filename=file_name
+                "{output_dir}/{sample}/{tool}/{sample}_{tool}.fasta", 
+                output_dir=OUT_DIR, sample=SAMPLE, tool=tool_name
             ))
 
   assembler_list = MAPPER if isinstance(MAPPER, list) else [MAPPER]
@@ -100,21 +119,29 @@ def get_final_outputs(include_multiqc=False):
                 else:
                     current_tools.append(tool)
 
-        final_outputs.extend(expand("{out_dir}/{sample}/darkmatter_{tool}/{sample}_Report_Diversity.html", 
+        final_outputs.extend(expand("{out_dir}/{sample}/darkmatter_{tool}/{sample}_report_summarize_{tool}.html", 
                 out_dir=OUT_DIR, sample=sample, tool=current_tools))
-        final_outputs.extend(expand("{out_dir}/{sample}/darkmatter_{tool}/{sample}_RdRp_Orfs.fasta", 
+        final_outputs.extend(expand("{out_dir}/{sample}/darkmatter_{tool}/{sample}_dm_validate_{tool}_orfs.fasta", 
+                out_dir=OUT_DIR, sample=sample, tool=current_tools))
+        final_outputs.extend(expand("{out_dir}/{sample}/darkmatter_{tool}/{sample}_dm_validate_{tool}_contigs.fasta", 
                 out_dir=OUT_DIR, sample=sample, tool=current_tools))
         if MODULES.get("rvdb", False):
-            final_outputs.extend(expand("{out_dir}/{sample}/rvdb_{tool}/{sample}_structural_contigs.fasta", 
+            final_outputs.extend(expand("{out_dir}/{sample}/rvdb_{tool}/{sample}_rvdb_summarize_{tool}.tsv", 
                     out_dir=OUT_DIR, sample=sample, tool=current_tools))
-            final_outputs.extend(expand("{out_dir}/{sample}/rvdb_{tool}/{sample}_pol_contigs.fasta", 
+            final_outputs.extend(expand("{out_dir}/{sample}/rvdb_{tool}/{sample}_rvdb_validate_structural_{tool}_orfs.fasta", 
+                    out_dir=OUT_DIR, sample=sample, tool=current_tools))
+            final_outputs.extend(expand("{out_dir}/{sample}/rvdb_{tool}/{sample}_rvdb_validate_structural_{tool}_contigs.fasta", 
+                    out_dir=OUT_DIR, sample=sample, tool=current_tools))
+            final_outputs.extend(expand("{out_dir}/{sample}/rvdb_{tool}/{sample}_rvdb_validate_pol_{tool}_orfs.fasta", 
+                    out_dir=OUT_DIR, sample=sample, tool=current_tools))
+            final_outputs.extend(expand("{out_dir}/{sample}/rvdb_{tool}/{sample}_rvdb_validate_pol_{tool}_contigs.fasta", 
                     out_dir=OUT_DIR, sample=sample, tool=current_tools))
 
   # 4. Reads (Diamond) + MEGAN LCA
   if MODULES["reads_diamond"]:
-    final_outputs.extend(expand("{out_dir}/{sample}/diamond_reads/{sample}_reads_hits_with_lineage.tsv", out_dir=OUT_DIR, sample=SAMPLE))
-    final_outputs.extend(expand("{out_dir}/{sample}/krona_reads/{sample}_reads_diamond_krona.html", out_dir=OUT_DIR, sample=SAMPLE))
-    final_outputs.extend(expand("{out_dir}/{sample}/megan_reads/{sample}_reads_summary.megan", out_dir=OUT_DIR, sample=SAMPLE))
+    final_outputs.extend(expand("{out_dir}/{sample}/diamond_reads/{sample}_append_lineage_reads.tsv", out_dir=OUT_DIR, sample=SAMPLE))
+    final_outputs.extend(expand("{out_dir}/{sample}/krona_reads/{sample}_krona_diamond_reads.html", out_dir=OUT_DIR, sample=SAMPLE))
+    final_outputs.extend(expand("{out_dir}/{sample}/megan_reads/{sample}_reads_daa2info.megan", out_dir=OUT_DIR, sample=SAMPLE))
 
   # 6. Reads (Kraken2)
   if MODULES["reads_kraken2"]:
@@ -122,9 +149,9 @@ def get_final_outputs(include_multiqc=False):
         meta = SAMPLE_META.get(sample)
         is_paired = (meta['mode'] == 'PAIRED') or (meta['mode'] == 'SRA' and len(meta['files']) == 2)
         label = "paired" if is_paired else "unpaired"
-        final_outputs.append(f"{OUT_DIR}/{sample}/kraken2_reads/{sample}_{label}_reads_biom.txt")
-        final_outputs.append(f"{OUT_DIR}/{sample}/krona_reads/{sample}_{label}_kraken2_krona.html")
-        final_outputs.append(f"{OUT_DIR}/kraken2_all/Rarefaction_Curve.pdf")
+        final_outputs.append(f"{OUT_DIR}/{sample}/kraken2_reads/{sample}_kraken_biom_reads_{label}.txt")
+        final_outputs.append(f"{OUT_DIR}/{sample}/krona_reads/{sample}_krona_reads_kraken_{label}.html")
+        final_outputs.append(f"{OUT_DIR}/kraken2_all/all_samples_kraken_rarefaction_plot.pdf")
 
   # 6. Contigs (Kraken2) & 7. Contigs (Diamond)
   if MODULES["kraken2"] or MODULES["diamond"]:
@@ -145,55 +172,55 @@ def get_final_outputs(include_multiqc=False):
           # 6. Contigs (Kraken2)
           if MODULES["kraken2"]:
               final_outputs.extend(expand(
-                  "{out_dir}/{sample}/kraken2_{tool}/{sample}_{tool}_contig_biom.txt",
+                  "{out_dir}/{sample}/kraken2_{tool}/{sample}_kraken_biom_contig_{tool}.txt",
                   out_dir=OUT_DIR, sample=sample, tool=current_tools
               ))
               final_outputs.extend(expand(
-                  "{out_dir}/{sample}/krona_{tool}/{sample}_{tool}_kraken2_krona.html",
+                  "{out_dir}/{sample}/krona_{tool}/{sample}_krona_kraken2_{tool}.html",
                   out_dir=OUT_DIR, sample=sample, tool=current_tools
               ))
               # Add Kraken2 statistics
               final_outputs.extend(expand(
-                  "{out_dir}/{sample}/stats/{sample}_{tool}_kraken2_stats.tsv",
+                  "{out_dir}/{sample}/stats/{sample}_generate_kraken2_stats_{tool}.tsv",
                   out_dir=OUT_DIR, sample=sample, tool=current_tools
               ))
 
           # 7. Contigs (Diamond)
           if MODULES["diamond"]:
-              final_outputs.extend(expand("{out_dir}/{sample}/diamond_{tool}/{sample}_{tool}_hits_with_lineage.tsv", out_dir=OUT_DIR, sample=sample, tool=current_tools))
-              final_outputs.extend(expand("{out_dir}/{sample}/krona_{tool}/{sample}_{tool}_diamond_krona.html",out_dir=OUT_DIR, sample=sample, tool=current_tools))
+              final_outputs.extend(expand("{out_dir}/{sample}/diamond_{tool}/{sample}_append_lineage_{tool}.tsv", out_dir=OUT_DIR, sample=sample, tool=current_tools))
+              final_outputs.extend(expand("{out_dir}/{sample}/krona_{tool}/{sample}_krona_diamond_{tool}.html", out_dir=OUT_DIR, sample=sample, tool=current_tools))
               # Add Diamond contig statistics
               final_outputs.extend(expand(
-                  "{out_dir}/{sample}/stats/{sample}_{tool}_diamond_stats.tsv",
+                  "{out_dir}/{sample}/stats/{sample}_generate_diamond_stats_{tool}.tsv",
                   out_dir=OUT_DIR, sample=sample, tool=current_tools
               ))
 
           # Assembly Statistics (for de novo assemblies)
           if MODULES["assembly"] and meta['mode'] != 'CONTIGS':
               final_outputs.extend(expand(
-                  "{out_dir}/{sample}/stats/{sample}_{tool}_assembly_stats.tsv",
+                  "{out_dir}/{sample}/stats/{sample}_generate_assembly_stats_{tool}.tsv",
                   out_dir=OUT_DIR, sample=sample, tool=current_tools
               ))
 
           # Dark Matter Statistics
           if MODULES["darkmatter"]:
               final_outputs.extend(expand(
-                  "{out_dir}/{sample}/stats/{sample}_{tool}_darkmatter_stats.tsv",
+                  "{out_dir}/{sample}/stats/{sample}_generate_darkmatter_stats_{tool}.tsv",
                   out_dir=OUT_DIR, sample=sample, tool=current_tools
               ))
 
   # Reads Diamond statistics
   if MODULES["reads_diamond"]:
-    final_outputs.extend(expand("{out_dir}/{sample}/stats/{sample}_reads_diamond_stats.tsv", out_dir=OUT_DIR, sample=SAMPLE))
+    final_outputs.extend(expand("{out_dir}/{sample}/stats/{sample}_generate_diamond_reads_stats.tsv", out_dir=OUT_DIR, sample=SAMPLE))
 
   # Reads Kraken2 statistics  
   if MODULES["reads_kraken2"]:
-    final_outputs.extend(expand("{out_dir}/{sample}/stats/{sample}_reads_kraken2_stats.tsv", out_dir=OUT_DIR, sample=SAMPLE))
+    final_outputs.extend(expand("{out_dir}/{sample}/stats/{sample}_generate_kraken2_reads_stats.tsv", out_dir=OUT_DIR, sample=SAMPLE))
 
   # MultiQC Reports
   if include_multiqc:
-      final_outputs.append(f"{OUT_DIR}/multiqc_report.html")
-      final_outputs.extend(expand("{out_dir}/{sample}/multiqc/multiqc_report.html", out_dir=OUT_DIR, sample=SAMPLE))
+      final_outputs.append(f"{OUT_DIR}/all_samples_multiqc_aggregate.html")
+      final_outputs.extend(expand("{out_dir}/{sample}/multiqc/{sample}_multiqc_sample.html", out_dir=OUT_DIR, sample=SAMPLE))
 
   return final_outputs
 
@@ -217,21 +244,26 @@ def get_multiqc_inputs(wildcards=None, sample=None):
 
     is_paired = (meta['mode'] == 'PAIRED') or (meta['mode'] == 'SRA' and len(meta['files']) == 2)
     label_reads = "paired" if is_paired else "unpaired"
-    fastp_suffix = "paired" if is_paired else "unp"
+    fastp_rule = "fastp_paired" if is_paired else "fastp_unpaired"
+    hf_rule = "host_filter_paired" if is_paired else "host_filter_unpaired"
 
     # Reads QC and Statistics (Skip for CONTIGS mode)
     if meta['mode'] != 'CONTIGS':
-        mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "fastp", f"{sample_id}_{fastp_suffix}.json"))
+        mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "fastp", f"{sample_id}_{fastp_rule}.json"))
+        
+        if MODULES.get("host_filter", False):
+            mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "stats", f"{sample_id}_{hf_rule}_stats.tsv"))
+            mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "host_filter", f"{sample_id}_{hf_rule}_summary.txt"))
         
         # Reads Diamond & Kraken2 Statistics
         if MODULES.get("reads_diamond", False):
             # Add Diamond read statistics summary
-            mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "stats", "{}_reads_diamond_stats.tsv".format(sample_id)))
+            mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "stats", f"{sample_id}_generate_diamond_reads_stats.tsv"))
         
         if MODULES.get("reads_kraken2", False):
-            mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "kraken2_reads", f"{sample_id}_{label_reads}_reads_report.txt"))
+            mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "kraken2_reads", f"{sample_id}_kraken2_reads_{label_reads}_report.txt"))
             # Add Kraken2 read statistics summary
-            mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "stats", "{}_reads_kraken2_stats.tsv".format(sample_id)))
+            mqc_inputs.append(os.path.join(OUT_DIR, sample_id, "stats", f"{sample_id}_generate_kraken2_reads_stats.tsv"))
 
     # Contigs QC (Expandido por K-mer)
     assembler_list = MAPPER if isinstance(MAPPER, list) else [MAPPER]
@@ -251,26 +283,26 @@ def get_multiqc_inputs(wildcards=None, sample=None):
 
     # Assembly Statistics (Number of contigs, N50, etc.)
     if MODULES.get("assembly", False) and meta['mode'] != 'CONTIGS':
-        mqc_inputs.extend(expand("{out_dir}/{sample}/stats/{sample}_{tool}_assembly_stats.tsv",
+        mqc_inputs.extend(expand("{out_dir}/{sample}/stats/{sample}_generate_assembly_stats_{tool}.tsv",
             out_dir=OUT_DIR, sample=sample_id, tool=tools_expanded))
 
     # Diamond Contig Statistics
     if MODULES.get("diamond", False):
         # Add Diamond contig statistics summary
-        mqc_inputs.extend(expand("{out_dir}/{sample}/stats/{sample}_{tool}_diamond_stats.tsv",
+        mqc_inputs.extend(expand("{out_dir}/{sample}/stats/{sample}_generate_diamond_stats_{tool}.tsv",
             out_dir=OUT_DIR, sample=sample_id, tool=tools_expanded))
 
     # Kraken2 Contig Statistics
     if MODULES.get("kraken2", False):
-        mqc_inputs.extend(expand("{out_dir}/{sample}/kraken2_{tool}/{sample}_{tool}_contig_report.txt",
+        mqc_inputs.extend(expand("{out_dir}/{sample}/kraken2_{tool}/{sample}_kraken2_contigs_{tool}_report.txt",
             out_dir=OUT_DIR, sample=sample_id, tool=tools_expanded))
         # Add Kraken2 contig statistics summary
-        mqc_inputs.extend(expand("{out_dir}/{sample}/stats/{sample}_{tool}_kraken2_stats.tsv",
+        mqc_inputs.extend(expand("{out_dir}/{sample}/stats/{sample}_generate_kraken2_stats_{tool}.tsv",
             out_dir=OUT_DIR, sample=sample_id, tool=tools_expanded))
 
     # Dark Matter Statistics (Putative dark matter contigs)
     if MODULES.get("darkmatter", False):
-        mqc_inputs.extend(expand("{out_dir}/{sample}/stats/{sample}_{tool}_darkmatter_stats.tsv",
+        mqc_inputs.extend(expand("{out_dir}/{sample}/stats/{sample}_generate_darkmatter_stats_{tool}.tsv",
             out_dir=OUT_DIR, sample=sample_id, tool=tools_expanded))
 
     return mqc_inputs
@@ -544,66 +576,70 @@ def get_contigs_path(wildcards):
     # 2. Caso Virtual Tool: SPADES com K-mer (ex: spades_k33)
     if tool_name.startswith("spades_k"):
         try:
-            # Pega o numero depois do "k" (spades_k33 -> 33)
             kmer_val = tool_name.split("_k")[1]
-            filename = TOOL_OUTPUT_MAP.get("spades")
-            
-            return os.path.join(OUT_DIR, sample, "spades", f"kmer_{kmer_val}", filename)
+            return os.path.join(OUT_DIR, sample, "spades", f"kmer_{kmer_val}", f"{sample}_spades_k{kmer_val}.fasta")
         except IndexError:
              raise ValueError(f"Could not parse kmer value from tool name: {tool_name}")
 
-    # 3. Caso Genérico (Megahit, Flye, Raven, ou o próprio 'spades' se chamado incorretamente)
+    # 3. Caso Medaka Polish (medaka_flye / medaka_raven)
+    elif tool_name.startswith("medaka_"):
+        assembler_base = tool_name.split("medaka_", 1)[1]
+        return os.path.join(OUT_DIR, sample, tool_name, f"{sample}_medaka_polish_{assembler_base}.fasta")
+
+    # 4. Caso Genérico (Megahit, Flye, Raven)
     else:
-        # Se por algum erro a regra chamar 'spades' puro, isso vai falhar lá na frente
-        # mas aqui retornamos o caminho padrão.
-        filename = TOOL_OUTPUT_MAP.get(tool_name)
-        if not filename:
-             # Tenta limpar sufixos caso haja algo estranho, ou lança erro
+        if tool_name not in TOOL_OUTPUT_MAP:
              raise ValueError(f"Tool '{tool_name}' not recognized in TOOL_OUTPUT_MAP.")
-            
-        return os.path.join(OUT_DIR, sample, tool_name, filename)
+        return os.path.join(OUT_DIR, sample, tool_name, f"{sample}_{tool_name}.fasta")
 
 #####################################################
 # --- 8. Helper Functions of Get De novo input --- #
 ####################################################
+def _get_reads_stage_dir():
+    """Return 'host_filter' when host_filter module is active, otherwise 'fastp'."""
+    if isinstance(MODULES, dict) and MODULES.get("host_filter", False):
+        return "host_filter"
+    return "fastp"
+
 def get_denovo_r1(wildcards):
     """Get R1 Only for paired-end(Paired/SRA)."""
     meta = SAMPLE_META.get(wildcards.sample)
-    # FIX: Check if len(files) > 1 to ensure it is actually paired
+    stage_dir = _get_reads_stage_dir()
+    rule_prefix = f"{stage_dir}_paired"
     if meta and meta['mode'] in ['PAIRED', 'SRA'] and len(meta['files']) > 1:
-        return os.path.join(OUT_DIR, wildcards.sample, "fastp", f"{wildcards.sample}_1.fastq.gz")
+        return os.path.join(OUT_DIR, wildcards.sample, stage_dir, f"{wildcards.sample}_{rule_prefix}_1.fastq.gz")
     return []
 
 def get_denovo_r2(wildcards):
     """Get R2 Only for paired-end(Paired/SRA)."""
     meta = SAMPLE_META.get(wildcards.sample)
-    # FIX: Check if len(files) > 1 to ensure it is actually paired
+    stage_dir = _get_reads_stage_dir()
+    rule_prefix = f"{stage_dir}_paired"
     if meta and meta['mode'] in ['PAIRED', 'SRA'] and len(meta['files']) > 1:
-        return os.path.join(OUT_DIR, wildcards.sample, "fastp", f"{wildcards.sample}_2.fastq.gz")   
+        return os.path.join(OUT_DIR, wildcards.sample, stage_dir, f"{wildcards.sample}_{rule_prefix}_2.fastq.gz")   
     return []
 
 def get_denovo_unpaired(wildcards):
     """
     Get files for the flag -s (single/unpaired).
     - PAIRED: Return 'orphans' paired reads.
-    - UNPAIRED or SRA-SINGLE: Return 'unp' main reads.
+    - UNPAIRED or SRA-SINGLE: Return 'unpaired' main reads.
     """
     meta = SAMPLE_META.get(wildcards.sample)
+    stage_dir = _get_reads_stage_dir()
 
     if not meta:
         return []
     
     # 1. True Paired (SRA or Local) -> Return Orphans
     if meta['mode'] in ['PAIRED', 'SRA'] and len(meta['files']) > 1:
-        return os.path.join(OUT_DIR, wildcards.sample, "fastp", f"{wildcards.sample}_orphans.fastq.gz")
+        return os.path.join(OUT_DIR, wildcards.sample, stage_dir, f"{wildcards.sample}_{stage_dir}_paired_orphans.fastq.gz")
     
     # 2. True Single (SRA or Local) -> Return Unpaired Main Reads
-    # We check if mode is UNPAIRED OR if mode is SRA with only 1 file
     is_sra_single = (meta['mode'] == 'SRA' and len(meta['files']) == 1)
     
     if meta['mode'] == 'UNPAIRED' or is_sra_single:
-        # This forces Snakemake to use fastp_unpaired because it needs the '_unp' file
-        return os.path.join(OUT_DIR, wildcards.sample, "fastp", f"{wildcards.sample}_unp.fastq.gz")
+        return os.path.join(OUT_DIR, wildcards.sample, stage_dir, f"{wildcards.sample}_{stage_dir}_unpaired.fastq.gz")
         
     return []
 
@@ -614,6 +650,7 @@ def get_ONP_input(wildcards):
     2. If PAIRED, returns empty list (skips Flye for Illumina samples).
     """
     meta = SAMPLE_META.get(wildcards.sample)
+    stage_dir = _get_reads_stage_dir()
 
     if not meta:
         return []
@@ -621,8 +658,7 @@ def get_ONP_input(wildcards):
     is_sra_single = (meta['mode'] == 'SRA' and len(meta['files']) == 1)
 
     if meta['mode'] == 'UNPAIRED' or is_sra_single:
-        # For single end, we use the fastp 'unp' output
-        return os.path.join(OUT_DIR, wildcards.sample, "fastp", f"{wildcards.sample}_unp.fastq.gz")
+        return os.path.join(OUT_DIR, wildcards.sample, stage_dir, f"{wildcards.sample}_{stage_dir}_unpaired.fastq.gz")
     
     return []
 
@@ -690,62 +726,63 @@ def get_diamond_db_input(wildcards):
     """
     Retorna a lista de arquivos do banco de dados Diamond.
     Lida tanto com arquivo único (.dmnd) quanto com banco BLAST particionado (nr.*).
+    Caso nenhum banco externo/local exista em resources/diamond, retorna o caminho do
+    banco base de teste (ecoli_db.dmnd) para acionar a regra download_default_diamond_db.
     """
-    # Usa caminho absoluto derivado da localização deste script para evitar
-    # problemas com --directory do Snakemake (que muda o CWD do processo).
     _script_dir = os.path.dirname(os.path.abspath(__file__))
     _project_root = os.path.normpath(os.path.join(_script_dir, "..", ".."))
     db_dir = os.path.join(_project_root, "resources", "diamond")
-    
-    # Tenta achar um .dmnd clássico
-    dmnd_file = glob.glob(os.path.join(db_dir, "*.dmnd"))
+
+    # 1. Tenta achar qualquer arquivo .dmnd existente e válido (ignora symlinks quebrados)
+    dmnd_file = [f for f in glob.glob(os.path.join(db_dir, "*.dmnd")) if os.path.exists(f)]
     if dmnd_file:
         return dmnd_file
-        
-    # Se não, procura por arquivos de índice do BLAST (ex: .acc, .phr, .psq)
-    # Pegamos tudo que estiver na pasta para garantir que o Snakemake monitore
-    blast_files = glob.glob(os.path.join(db_dir, "*"))
-    
-    if not blast_files:
-        raise ValueError(f"Nenhum banco de dados Diamond encontrado em {db_dir}")
-        
-    return blast_files
+
+    # 2. Procura por arquivos de índice do BLAST particionado (ex: .acc, .phr, .psq, .pal)
+    blast_idx = [
+        f for f in (
+            glob.glob(os.path.join(db_dir, "*.acc"))
+            + glob.glob(os.path.join(db_dir, "*.phr"))
+            + glob.glob(os.path.join(db_dir, "*.psq"))
+            + glob.glob(os.path.join(db_dir, "*.pal"))
+        )
+        if os.path.exists(f)
+    ]
+    if blast_idx:
+        return [
+            f for f in glob.glob(os.path.join(db_dir, "*"))
+            if not os.path.basename(f).startswith(".") and os.path.exists(f)
+        ]
+
+    # 3. Fallback automático de 1ª execução: solicita o banco base E. coli K-12 (ecoli_db.dmnd)
+    return [os.path.join(db_dir, "ecoli_db.dmnd")]
 
 def get_diamond_db_name(wildcards):
     """
     Retorna o NOME BASE para o comando do Diamond (-d).
+    Caso nenhum banco exista ainda (antes da regra download_default_diamond_db rodar),
+    retorna 'ecoli_db.dmnd'.
     """
-    # Usa caminho absoluto derivado da localização deste script para evitar
-    # problemas com --directory do Snakemake (que muda o CWD do processo).
     _script_dir = os.path.dirname(os.path.abspath(__file__))
     _project_root = os.path.normpath(os.path.join(_script_dir, "..", ".."))
     db_dir = os.path.join(_project_root, "resources", "diamond")
-    
-    # Caso 1: Arquivo .dmnd único
-    dmnd_files = glob.glob(os.path.join(db_dir, "*.dmnd"))
+
+    # Caso 1: Arquivo .dmnd único e válido
+    dmnd_files = [f for f in glob.glob(os.path.join(db_dir, "*.dmnd")) if os.path.exists(f)]
     if dmnd_files:
-        return os.path.basename(dmnd_files[0]) # Ex: database.dmnd
-        
+        return os.path.basename(dmnd_files[0])
+
     # Caso 2: Banco BLAST particionado
-    # Procura arquivos comuns do índice para deduzir o prefixo (ex: nr.00.acc -> nr)
-    acc_files = glob.glob(os.path.join(db_dir, "*.acc"))
+    acc_files = [f for f in glob.glob(os.path.join(db_dir, "*.acc")) if os.path.exists(f)]
     if acc_files:
         filename = os.path.basename(acc_files[0])
-        # Remove sufixos .número.acc para pegar o prefixo limpo (ex: nr.78.acc -> nr)
-        # Ajuste a regex conforme o padrão exato dos seus arquivos
-        prefix = re.sub(r'\.\d+\.acc$', '', filename) 
-        # Fallback simples se não tiver número
+        prefix = re.sub(r'\.\d+\.acc$', '', filename)
         if prefix == filename:
             prefix = os.path.splitext(filename)[0]
         return prefix
-        
-    # Fallback genérico: pega o nome do primeiro arquivo sem extensão
-    all_files = glob.glob(os.path.join(db_dir, "*"))
-    if not all_files:
-        print(f"[WARNING] Diamond DB directory '{db_dir}' is empty. Returning placeholder for dry-run.", file=sys.stderr)
-        return "missing_db"
-    first_file = os.path.basename(all_files[0])
-    return first_file.split('.')[0]
+
+    # Caso 3: Banco base padrão (será criado pela regra download_default_diamond_db)
+    return "ecoli_db.dmnd"
 
 ########################################################
 # --- 12. Check Presence of header in Diamond File --- #
@@ -778,5 +815,5 @@ def get_all_kraken_reports(wildcards):
         if meta:
              is_paired = (meta['mode'] == 'PAIRED') or (meta['mode'] == 'SRA' and len(meta['files']) == 2)
              label = "paired" if is_paired else "unpaired"
-             paths.append(os.path.join(OUT_DIR, s, "kraken2_reads", f"{s}_{label}_reads_report.txt"))
+             paths.append(os.path.join(OUT_DIR, s, "kraken2_reads", f"{s}_kraken2_reads_{label}_report.txt"))
     return paths

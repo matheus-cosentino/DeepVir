@@ -53,15 +53,15 @@ rule prepare_rvdb:
 
 rule rvdb_search:
   input:
-    orfs = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta"),
+    orfs = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_cd_hit_{tool}.fasta"),
     hmm = os.path.join(RVDB_DIR[0], "U-RVDBv31.0-prot.hmm"),
     indices = multiext(os.path.join(RVDB_DIR[0], "U-RVDBv31.0-prot.hmm"), ".h3m", ".h3i", ".h3f", ".h3p")
   output:
-    result = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_RVDB_results.tsv")
+    result = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_rvdb_search_{tool}.tsv")
   params:
     evalue=config['hmmscan']['evalue']
   log:
-    os.path.join(LOG_DIR, "{sample}", "rvdb_search_{tool}_{sample}.log")
+    os.path.join(LOG_DIR, "{sample}", "{sample}_rvdb_search_{tool}.log")
   conda:
     HMMER
   shell:
@@ -71,12 +71,12 @@ rule rvdb_search:
 
 rule rvdb_summarize:
   input:
-    tbl = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_RVDB_results.tsv"),
+    tbl = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_rvdb_search_{tool}.tsv"),
     sqlite = os.path.join(RVDB_DIR[0], "U-RVDBv31.0-prot-hmm.sqlite")
   output:
-    csv = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_RVDB_Summary.csv")
+    csv = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_rvdb_summarize_{tool}.tsv")
   log:
-    os.path.join(LOG_DIR, "{sample}", "rvdb_summarize_{tool}_{sample}.log")
+    os.path.join(LOG_DIR, "{sample}", "{sample}_rvdb_summarize_{tool}.log")
   conda:
     CORE
   script:
@@ -85,11 +85,11 @@ rule rvdb_summarize:
 rule rvdb_validate_structural:
   input:
     fasta = get_contigs_path,
-    orfs  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta"),
-    tsv   = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_RVDB_Summary.csv")
+    orfs  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_cd_hit_{tool}.fasta"),
+    tsv   = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_rvdb_summarize_{tool}.tsv")
   output:
-    raw_rvdb_orfs    = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_structural_Orfs.fasta"),
-    raw_rvdb_contigs = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_structural_contigs.fasta")
+    raw_rvdb_orfs    = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_rvdb_validate_structural_{tool}_orfs.fasta"),
+    raw_rvdb_contigs = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_rvdb_validate_structural_{tool}_contigs.fasta")
   log:
     os.path.join(LOG_DIR, "{sample}", "{sample}_rvdb_validate_structural_{tool}.log")
   conda:
@@ -100,11 +100,11 @@ rule rvdb_validate_structural:
 rule rvdb_validate_pol:
   input:
     fasta = get_contigs_path,
-    orfs  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta"),
-    tsv   = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_RVDB_Summary.csv")
+    orfs  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_cd_hit_{tool}.fasta"),
+    tsv   = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_rvdb_summarize_{tool}.tsv")
   output:
-    raw_rvdb_orfs    = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_pol_Orfs.fasta"),
-    raw_rvdb_contigs = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_pol_contigs.fasta")
+    raw_rvdb_orfs    = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_rvdb_validate_pol_{tool}_orfs.fasta"),
+    raw_rvdb_contigs = os.path.join(OUT_DIR, "{sample}", "rvdb_{tool}", "{sample}_rvdb_validate_pol_{tool}_contigs.fasta")
   log:
     os.path.join(LOG_DIR, "{sample}", "{sample}_rvdb_validate_pol_{tool}.log")
   conda:

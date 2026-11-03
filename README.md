@@ -1,5 +1,6 @@
-# DeepVir: Reproducible Viral Discovery Pipeline
+# DeepVir 2.0: Reproducible Viral Discovery Pipeline
 
+[![Version](https://img.shields.io/badge/version-2.0-emerald.svg)](README.md)
 [![Python](https://img.shields.io/badge/python-≥3.8-blue.svg)](https://www.python.org/)
 [![Snakemake](https://img.shields.io/badge/snakemake-≥9.0.0-brightgreen.svg)](https://snakemake.readthedocs.io)
 [![Conda-Env](https://img.shields.io/badge/conda-env-green.svg)](pipeline/workflow/envs/DeepVir.yaml)

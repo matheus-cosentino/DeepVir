@@ -25,19 +25,16 @@ rule fastp_paired:
         r1 = get_input_r1,
         r2 = get_input_r2
     output:
-        # Define all possible output files explicitly and statically.
-        #r1= temp(os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_1.fastq.gz")),
-        #r2= temp(os.path.join(OUT_DIR, "{sample}", "fastp" , "{sample}_2.fastq.gz")),
-        r1= os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_1.fastq.gz"),
-        r2= os.path.join(OUT_DIR, "{sample}", "fastp" , "{sample}_2.fastq.gz"),
-        orphans=os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_orphans.fastq.gz"),
-       #orphans=temp(os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_orphans.fastq.gz")),
-        html = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_paired.html"),
-        json= os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_paired.json")
+        # Define all possible output files explicitly and statically ({sample}_{rule} standard).
+        r1 = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_fastp_paired_1.fastq.gz"),
+        r2 = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_fastp_paired_2.fastq.gz"),
+        orphans = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_fastp_paired_orphans.fastq.gz"),
+        html = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_fastp_paired.html"),
+        json = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_fastp_paired.json")
     log:
         os.path.join(LOG_DIR, "{sample}", "{sample}_fastp_paired.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "fastp_paired", "{sample}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "fastp_paired", "{sample}_fastp_paired.tsv")
     params:
         length_required=lambda wc: config['fastp']['length_required'][0] if isinstance(config['fastp']['length_required'], (list, tuple)) else config['fastp']['length_required'],
         quality=lambda wc: config['fastp']['qualified_quality_phred'][0] if isinstance(config['fastp']['qualified_quality_phred'], (list, tuple)) else config['fastp']['qualified_quality_phred']
@@ -64,14 +61,13 @@ rule fastp_unpaired:
     input:
         reads = get_input_unp,
     output:
-        #r1= temp(os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_unp.fastq.gz")),
-        r1= os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_unp.fastq.gz"),
-        html= os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_unp.html"),      
-        json= os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_unp.json")
+        r1 = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_fastp_unpaired.fastq.gz"),
+        html = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_fastp_unpaired.html"),
+        json = os.path.join(OUT_DIR, "{sample}", "fastp", "{sample}_fastp_unpaired.json")
     log:
         os.path.join(LOG_DIR, "{sample}", "{sample}_fastp_unpaired.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "fastp_unpaired", "{sample}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "fastp_unpaired", "{sample}_fastp_unpaired.tsv")
     params:
         length_required=lambda wc: config['fastp']['length_required'][0] if isinstance(config['fastp']['length_required'], (list, tuple)) else config['fastp']['length_required'],
         quality=lambda wc: config['fastp']['qualified_quality_phred'][0] if isinstance(config['fastp']['qualified_quality_phred'], (list, tuple)) else config['fastp']['qualified_quality_phred']

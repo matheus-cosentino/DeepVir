@@ -11,9 +11,10 @@ raw_rdrp = snakemake.output.raw_rdrp
 raw_contigs = snakemake.output.raw_contigs
 sample = snakemake.wildcards.sample
 tool = snakemake.wildcards.tool
+minscore = float(getattr(snakemake.params, "minscore", 75.0))
 
 with open(log_file, "w") as logf:
-    logf.write(f"[INFO] dm_validate started for {sample} / {tool}\n")
+    logf.write(f"[INFO] dm_validate started for {sample} / {tool} (minscore >= {minscore})\n")
 
     # Lê o TSV — pode estar vazio se nenhum RdRp foi encontrado
     try:
@@ -22,8 +23,14 @@ with open(log_file, "w") as logf:
         logf.write(f"[ERROR] Could not read RdRp TSV: {e}\n")
         df = pd.DataFrame()
 
+    if not df.empty and 'rdrp' in df.columns:
+        total_raw = len(df)
+        df['rdrp_num'] = pd.to_numeric(df['rdrp'], errors='coerce').fillna(0.0)
+        df = df[df['rdrp_num'] >= minscore]
+        logf.write(f"[INFO] Filtered RdRp candidates by rdrp >= {minscore}: {len(df)}/{total_raw} hits retained.\n")
+
     if df.empty or 'Label' not in df.columns:
-        logf.write("[WARNING] No RdRp hits found. Creating empty output files.\n")
+        logf.write("[WARNING] No RdRp hits found above threshold. Creating empty output files.\n")
         open(raw_rdrp, 'w').close()
         open(raw_contigs, 'w').close()
     else:

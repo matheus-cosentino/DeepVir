@@ -31,9 +31,9 @@ rule download_sra_data_paired:
         r1 = os.path.join(config["data_dir"], "{sample}_1.fastq.gz"),
         r2 = os.path.join(config["data_dir"], "{sample}_2.fastq.gz")
     log:
-        os.path.join(LOG_DIR, "{sample}", "{sample}_download.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_download_sra_data_paired.log")
     benchmark:
-        os.path.join(config["output_dir"], "benchmarks", "download_sra", "{sample}.tsv")
+        os.path.join(config["output_dir"], "benchmarks", "download_sra_data_paired", "{sample}_download_sra_data_paired.tsv")
     conda:
         DOWNLOAD
     shadow: 
@@ -89,9 +89,9 @@ rule download_sra_single:
     output:
         r1 = os.path.join(config["data_dir"], "{sample}_1.fastq.gz")
     log:
-        os.path.join(LOG_DIR, "{sample}", "{sample}_download_single.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_download_sra_single.log")
     benchmark:
-        os.path.join(config["output_dir"], "benchmarks", "download_sra_single", "{sample}.tsv")
+        os.path.join(config["output_dir"], "benchmarks", "download_sra_single", "{sample}_download_sra_single.tsv")
     conda:
         DOWNLOAD
     wildcard_constraints:

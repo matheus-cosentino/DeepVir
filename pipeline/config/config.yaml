@@ -12,7 +12,7 @@
 #           ░░░░  ░░░░░ ░░░░░ ░       ░   ░░░ ░   ░                               #
 #                                                                                 #
 ###################################################################################
-#                         version: 1.0  |  09.2026                                #
+#                         version: 2.0  |  10.2026                                #
 ###################################################################################
                                                                                
 ### Main output directory
@@ -36,6 +36,7 @@ sample_list: "data/accessions.txt"
 modules: 
   keep_download: true  #Remove data download from SRA (default: false)
   download_only: false #Only download data from SRA (default: false)
+  host_filter: false #Filter out host reads via BWA alignment against a host genome accession (default: false)
   assembly: true # Perform de novo assembly for reads (default: false)
   kraken2: true #Perform taxonomic assignment for Kraken2 (default: false)
   diamond: true #Perform taxonomic assignment for Diamond against nr5 for Reads(default: false)
@@ -43,6 +44,10 @@ modules:
   rvdb: false #Perform optional RVDB validation on dark matter ORFs (default: false)
   reads_kraken2: true #Perform reads taxonomic identification (default: false)
   reads_diamond: true #Perform reads taxonomic identification via Diamond (includes MEGAN LCA analysis) (default: false)
+
+### Host Genome Filtering / Depletion (used when modules.host_filter is true)
+host_filter:
+  accession: "GCA_022682495.2, GCF_000819615.1"  # NCBI Genome Assembly Accessions (e.g. GCA_022682495.2 for Desmodus rotundus, GCF_000819615.1 for PhiX174)
 
 
 ### De novo tools to be requested
@@ -79,10 +84,13 @@ envs:
   r_rarefaction: "envs/r_rarefaction.yaml"
   hmmer: "envs/hmmer.yaml"
   megan: "envs/megan.yaml"
+  host_filter: "envs/host_filter.yaml"
 
 
 ### databases and resources for the workflow
 resources:
+  host:
+    - "resources/host"
   megan:
     - "resources/megan"
   diamond: 
@@ -265,7 +273,7 @@ kraken_biom:
 #  Dark Matter Search
 palm_annot: 
   seqtype: "aa" 
-  minscore: 50
+  minscore: 75
   minpssmscore: 10
 
 # Medaka correction

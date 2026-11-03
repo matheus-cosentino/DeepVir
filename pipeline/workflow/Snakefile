@@ -12,7 +12,7 @@
 #           ░░░░  ░░░░░ ░░░░░ ░       ░   ░░░ ░   ░                               #
 #                                                                                 #
 ###################################################################################
-#                         version: 1.0  |  09.2026                                #
+#                         version: 2.0  |  10.2026                                #
 ###################################################################################
                                                                                
  
@@ -132,27 +132,35 @@ functions.config = config
 ##############################################
 # --- 5. Define Conda Environment Paths --- #
 #############################################
+# Use static, deterministic paths derived from the Snakefile directory instead of
+# workflow.source_path(), because workflow.source_path() copies the YAML into a new
+# random runtime-cache/tmpXXXXXX directory on every invocation, which changes the
+# Snakemake conda environment path hash and triggers unnecessary re-creations.
+_WORKFLOW_DIR = _os.path.dirname(workflow.snakefile)
+def _env_path(rel_path):
+    return _os.path.normpath(_os.path.join(_WORKFLOW_DIR, rel_path))
 
-DOWNLOAD = workflow.source_path(config["envs"]["download"])
-FASTP = workflow.source_path(config["envs"]["fastp"])
-DENOVO = workflow.source_path(config["envs"]["denovo"])
-MEGAHIT_ENV = workflow.source_path(config["envs"]["megahit"])
-FLYE_ENV = workflow.source_path(config["envs"]["flye"])
-RAVEN_ENV = workflow.source_path(config["envs"]["raven"])
-MEDAKA_ENV = workflow.source_path(config["envs"]["medaka"])
-DIAMOND = workflow.source_path(config["envs"]["diamond"])
-KRAKEN2= workflow.source_path(config["envs"]["kraken2"])
-KRAKEN2_BIOM= workflow.source_path(config["envs"]["kraken2_biom"])
-TAXONKIT = workflow.source_path(config["envs"]["taxonkit"])
-CORE = workflow.source_path(config["envs"]["core"])
-REPORT = workflow.source_path(config["envs"]["report"])
-PALM = workflow.source_path(config["envs"]["palm_annot"])
-MULTIQC = workflow.source_path(config["envs"]["multiqc"])
-SPADES_ENV = workflow.source_path(config["envs"]["spades"])
-KRONA = workflow.source_path(config["envs"]["krona"])
-R_RAREFACTION = workflow.source_path(config["envs"]["r_rarefaction"])
-HMMER = workflow.source_path(config["envs"]["hmmer"])
-MEGAN = workflow.source_path(config["envs"]["megan"])
+DOWNLOAD = _env_path(config["envs"]["download"])
+FASTP = _env_path(config["envs"]["fastp"])
+DENOVO = _env_path(config["envs"]["denovo"])
+MEGAHIT_ENV = _env_path(config["envs"]["megahit"])
+FLYE_ENV = _env_path(config["envs"]["flye"])
+RAVEN_ENV = _env_path(config["envs"]["raven"])
+MEDAKA_ENV = _env_path(config["envs"]["medaka"])
+DIAMOND = _env_path(config["envs"]["diamond"])
+KRAKEN2 = _env_path(config["envs"]["kraken2"])
+KRAKEN2_BIOM = _env_path(config["envs"]["kraken2_biom"])
+TAXONKIT = _env_path(config["envs"]["taxonkit"])
+CORE = _env_path(config["envs"]["core"])
+REPORT = _env_path(config["envs"]["report"])
+PALM = _env_path(config["envs"]["palm_annot"])
+MULTIQC = _env_path(config["envs"]["multiqc"])
+SPADES_ENV = _env_path(config["envs"]["spades"])
+KRONA = _env_path(config["envs"]["krona"])
+R_RAREFACTION = _env_path(config["envs"]["r_rarefaction"])
+HMMER = _env_path(config["envs"]["hmmer"])
+MEGAN = _env_path(config["envs"]["megan"])
+HOST_FILTER = _env_path(config["envs"].get("host_filter", "envs/host_filter.yaml"))
 
 
 #######################################
@@ -161,6 +169,7 @@ MEGAN = workflow.source_path(config["envs"]["megan"])
 
 include: "rules/get_data.smk"
 include: "rules/fastp.smk"
+include: "rules/host_filter.smk"
 include: "rules/denovo.smk"
 include: "rules/diamond.smk"
 include: "rules/kraken2.smk"

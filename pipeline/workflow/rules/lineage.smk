@@ -27,9 +27,9 @@ rule download_prot:
     nodes = os.path.join(TAXONOMY_DIR[0], "nodes.dmp"),
     names = os.path.join(TAXONOMY_DIR[0], "names.dmp")
   log:
-    os.path.join(LOG_DIR, "workflow", "tax_download_mapping.log")
+    os.path.join(LOG_DIR, "workflow", "download_prot.log")
   benchmark:
-    os.path.join(OUT_DIR, "benchmarks", "download_prot", "taxonomy.tsv")
+    os.path.join(OUT_DIR, "benchmarks", "download_prot", "download_prot.tsv")
   params:
     taxon_gz = os.path.join(TAXONOMY_DIR[0], "taxdump.tar.gz"),
     tax_dir = lambda w, output: os.path.dirname(output.gz)
@@ -57,16 +57,16 @@ rule map_accession_to_taxid:
     wildcard_constraints:
       tool = r"spades_k[\w]+|spades|megahit|flye|raven|medaka_flye|medaka_raven|pre_assembled|reads"
     input:
-      hit_file = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_{tool}_report.txt"),
+      hit_file = lambda wc: os.path.join(OUT_DIR, wc.sample, "diamond_reads", f"{wc.sample}_diamond_view_reads.txt") if wc.tool == "reads" else os.path.join(OUT_DIR, wc.sample, f"diamond_{wc.tool}", f"{wc.sample}_diamond_view_contigs_{wc.tool}.txt"),
       taxid_map = rules.download_prot.output.gz
     output:
-      ids = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_{tool}_hits_with_taxid.tmp")
+      ids = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_map_accession_to_taxid_{tool}.tmp")
     shadow: 
       "minimal"
     log:
-      os.path.join(LOG_DIR, "{sample}", "{sample}_{tool}_map_acc_prot.log")
+      os.path.join(LOG_DIR, "{sample}", "{sample}_map_accession_to_taxid_{tool}.log")
     benchmark:
-      os.path.join(OUT_DIR, "benchmarks", "map_accession_to_taxid", "{sample}_{tool}.tsv")
+      os.path.join(OUT_DIR, "benchmarks", "map_accession_to_taxid", "{sample}_map_accession_to_taxid_{tool}.tsv")
     conda:
       CORE
     script:
@@ -83,16 +83,16 @@ rule split_hits_by_taxid:
     wildcard_constraints:
       tool = r"spades_k[\w]+|spades|megahit|flye|raven|medaka_flye|medaka_raven|pre_assembled|reads"
     input:
-        os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_{tool}_hits_with_taxid.tmp")
+        os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_map_accession_to_taxid_{tool}.tmp")
     output:
-        valid_hits = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_{tool}_hits_with_header.tsv"),
-        no_lineage = temp(os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_{tool}_hits_no_lineage.temp"))
+        valid_hits = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_split_hits_by_taxid_{tool}.tsv"),
+        no_lineage = temp(os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_split_hits_by_taxid_{tool}_no_lineage.temp"))
     params:
         header="qseqid\tsseqid\tpident\tlength\tmismatch\tgapopen\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\ttaxid"
     log:
-        os.path.join(LOG_DIR, "{sample}", "{sample}_{tool}_split_hits_by_taxid.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_split_hits_by_taxid_{tool}.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "split_hits_by_taxid", "{sample}_{tool}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "split_hits_by_taxid", "{sample}_split_hits_by_taxid_{tool}.tsv")
     conda:
         CORE
     shell:
@@ -127,15 +127,15 @@ rule append_lineage:
     input:
         valid_hits = rules.split_hits_by_taxid.output.valid_hits
     output:
-        lineages = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_{tool}_hits_with_lineage.tsv")
+        lineages = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_append_lineage_{tool}.tsv")
     params:
         base_header="qseqid\tsseqid\tpident\tlength\tmismatch\tgapopen\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\tTaxid",
         lineage_header="Lineage\tCelular\tAcelular\tRealm\tKingdom\tPhylum\tClass\tOrder\tFamily\tGenus\tSpecies",
         nodes=os.path.join(TAXONOMY_DIR[0], "nodes.dmp")
     log:
-        os.path.join(LOG_DIR, "{sample}", "{sample}_{tool}_diamond_lineages.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_append_lineage_{tool}.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "append_lineage", "{sample}_{tool}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "append_lineage", "{sample}_append_lineage_{tool}.tsv")
     conda:
         TAXONKIT
     shell:

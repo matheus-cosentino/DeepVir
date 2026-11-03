@@ -28,13 +28,13 @@ rule get_nohit_fasta:
     tool = r"spades_k[\w]+|spades|megahit|flye|raven|medaka_flye|medaka_raven|pre_assembled"
   input:
     fasta = get_contigs_path,
-    diamond = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_{tool}_hits_with_lineage.tsv")  
+    diamond = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_append_lineage_{tool}.tsv")  
   output:
-    nohits = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_{tool}_nohit.fasta")
+    nohits = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_get_nohit_fasta_{tool}.fasta")
   log:
-    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_nohits.log")
+    os.path.join(LOG_DIR, "{sample}", "{sample}_get_nohit_fasta_{tool}.log")
   benchmark:
-    os.path.join(OUT_DIR, "benchmarks", "get_nohit_fasta", "{sample}_{tool}.tsv")
+    os.path.join(OUT_DIR, "benchmarks", "get_nohit_fasta", "{sample}_get_nohit_fasta_{tool}.tsv")
   conda:
     CORE
   script:
@@ -46,13 +46,13 @@ rule get_nohit_fasta:
 ################################################ 
 rule find_orfs:
   input: 
-    fasta = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_{tool}_nohit.fasta")
+    fasta = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_get_nohit_fasta_{tool}.fasta")
   output:
-    orfs = temp(os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta.temp"))
+    orfs = temp(os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_find_orfs_{tool}.fasta.temp"))
   log:
-    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_orfs.log")
+    os.path.join(LOG_DIR, "{sample}", "{sample}_find_orfs_{tool}.log")
   benchmark:
-    os.path.join(OUT_DIR, "benchmarks", "find_orfs", "{sample}_{tool}.tsv")
+    os.path.join(OUT_DIR, "benchmarks", "find_orfs", "{sample}_find_orfs_{tool}.tsv")
   conda:
     PALM
   shell:
@@ -90,13 +90,13 @@ rule cd_hit:
   Remove duplicated ORFs using CD-HIT.
   """
   input:
-    fasta = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta.temp")
+    fasta = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_find_orfs_{tool}.fasta.temp")
   output:  
-    orfs = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta")
+    orfs = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_cd_hit_{tool}.fasta")
   log:
-    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_cdhit.log")
+    os.path.join(LOG_DIR, "{sample}", "{sample}_cd_hit_{tool}.log")
   benchmark:
-    os.path.join(OUT_DIR, "benchmarks", "cd_hit", "{sample}_{tool}.tsv")
+    os.path.join(OUT_DIR, "benchmarks", "cd_hit", "{sample}_cd_hit_{tool}.tsv")
   conda:
     PALM
   shell:
@@ -118,10 +118,10 @@ rule cd_hit:
 ################################################## 
 rule palm_annot:
   input:
-    fasta = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta")
+    fasta = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_cd_hit_{tool}.fasta")
   output:
-    fev  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp.fev"),
-    rdrp = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp.fasta")
+    fev  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_palm_annot_{tool}.fev"),
+    rdrp = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_palm_annot_{tool}.fasta")
   params:
     seqtype = config["palm_annot"]["seqtype"],
     minscore = config["palm_annot"]["minscore"],
@@ -129,9 +129,9 @@ rule palm_annot:
   conda:
     PALM
   log:
-    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_palmannot.log")  
+    os.path.join(LOG_DIR, "{sample}", "{sample}_palm_annot_{tool}.log")  
   benchmark:
-    os.path.join(OUT_DIR, "benchmarks", "palm_annot", "{sample}_{tool}.tsv")
+    os.path.join(OUT_DIR, "benchmarks", "palm_annot", "{sample}_palm_annot_{tool}.tsv")
   script:
     "../scripts/palm_annot_run.py"
   
@@ -141,15 +141,15 @@ rule palm_annot:
 
 rule fev2tsv_single:
   input:
-    fev = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp.fev")
+    fev = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_palm_annot_{tool}.fev")
   output:
-    tsv = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp.tsv")
+    tsv = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_fev2tsv_single_{tool}.tsv")
   conda:
     PALM
   log:
-    os.path.join(LOG_DIR, "{sample}", "darkmatter_{tool}_{sample}_fev2tsv.log")
+    os.path.join(LOG_DIR, "{sample}", "{sample}_fev2tsv_single_{tool}.log")
   benchmark:
-    os.path.join(OUT_DIR, "benchmarks", "fev2tsv_single", "{sample}_{tool}.tsv")
+    os.path.join(OUT_DIR, "benchmarks", "fev2tsv_single", "{sample}_fev2tsv_single_{tool}.tsv")
   script:
     "../scripts/fev2tsv_run.py"
 
@@ -159,18 +159,18 @@ rule fev2tsv_single:
 rule report_summarize:
     input:
         fasta = get_contigs_path,
-        lineages = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_{tool}_hits_with_lineage.tsv"),
+        lineages = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_append_lineage_{tool}.tsv"),
         #basta_lca = os.path.join(OUT_DIR, "{sample}", "basta_{tool}", "{sample}_{tool}_lca.tsv"),
-        dusk = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp.tsv")
+        dusk = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_fev2tsv_single_{tool}.tsv")
     output:
-        html = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_Report_Diversity.html")
+        html = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_report_summarize_{tool}.html")
     params:
         out_dir = lambda w, output: os.path.dirname(output.html),
         logos = os.path.join(RESOURCES_DIR, "logo")
     log:
         os.path.join(LOG_DIR, "{sample}", "{sample}_report_summarize_{tool}.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "report_summarize", "{sample}_{tool}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "report_summarize", "{sample}_report_summarize_{tool}.tsv")
     conda:
         REPORT
     shell:
@@ -195,15 +195,17 @@ rule report_summarize:
 rule dm_validate:
   input:
     fasta = get_contigs_path,
-    orfs  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_ORFs.fasta"),
-    dusk  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp.tsv")
+    orfs  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_cd_hit_{tool}.fasta"),
+    dusk  = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_fev2tsv_single_{tool}.tsv")
   output:
-    raw_rdrp    = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp_Orfs.fasta"),
-    raw_contigs = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_RdRp_contigs.fasta")
+    raw_rdrp    = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_dm_validate_{tool}_orfs.fasta"),
+    raw_contigs = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_dm_validate_{tool}_contigs.fasta")
+  params:
+    minscore = config["palm_annot"]["minscore"]
   log:
     os.path.join(LOG_DIR, "{sample}", "{sample}_dm_validate_{tool}.log")
   benchmark:
-    os.path.join(OUT_DIR, "benchmarks", "dm_validate", "{sample}_{tool}.tsv")
+    os.path.join(OUT_DIR, "benchmarks", "dm_validate", "{sample}_dm_validate_{tool}.tsv")
   conda:
     REPORT
   script:

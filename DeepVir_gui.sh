@@ -1,6 +1,6 @@
 #!/bin/bash
 #########################################################################
-# DeepVir_gui.sh - 1-Click Launcher for Linux & WSL                     #
+# DeepVir_gui.sh - DeepVir 2.0 1-Click Launcher for Linux & WSL         #
 # Auto-detects Conda/Miniforge or System Python 3 on any machine        #
 #########################################################################
 

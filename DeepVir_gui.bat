@@ -1,5 +1,5 @@
 @echo off
-TITLE DeepVir - Desktop GUI (Windows + WSL)
+TITLE DeepVir 2.0 - Desktop GUI (Windows + WSL)
 cd /d "%~dp0"
 
 REM 1. Try native Windows Python first (zero WSLg/X11 window overhead)

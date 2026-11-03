@@ -1,14 +1,14 @@
 ###################################################################################
 #                              Local Profile                              #
 #                         MSc. Matheus Cosentino                                  #
-#                         version: 1.0  |  09.2026                                #
+#                         version: 2.0  |  10.2026                                #
 ###################################################################################
 
 ######################
 # --- 1. Params --- #
 #####################
 jobs: 2
-restart-times: 2
+restart-times: 1
 keep-going: true
 rerun-incomplete: true
 use-conda: true
@@ -25,45 +25,54 @@ default-resources:
 # --- 3. Specific Rule Resources  --- #
 #######################################
 set-resources:
+  bwa_index_host:
+    mem_mb: 12000
+    threads: 6
+  host_filter_paired:
+    mem_mb: 12000
+    threads: 6
+  host_filter_unpaired:
+    mem_mb: 12000
+    threads: 6
   spades:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   megahit:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   flye:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   diamond_blastx_contigs:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   diamond_blastx_reads:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   reads_diamond_daa:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   map_accession_to_taxid:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   basta_search:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   kraken2_contigs:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   kraken2_reads_paired:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   kraken2_reads_unpaired:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   cd_hit:
-    mem_mb: 8000
+    mem_mb: 12000
     threads: 4
   rvdb_search:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6
   krona_update_taxonomy:
-    mem_mb: 8000
-    threads: 4
+    mem_mb: 12000
+    threads: 6

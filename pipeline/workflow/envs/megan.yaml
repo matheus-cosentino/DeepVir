@@ -4,4 +4,4 @@ channels:
   - bioconda
   - nodefaults
 dependencies:
-  - megan=6.25.10
+  - megan

@@ -12,7 +12,7 @@
 #           ░░░░  ░░░░░ ░░░░░ ░       ░   ░░░ ░   ░                               #
 #                                                                                 #
 ###################################################################################
-#                         version: 1.0  |  09.2026                                #
+#                         version: 2.0  |  10.2026                                #
 ###################################################################################
 
 # cluster params, number of jobs to be ran simullteniously
@@ -91,3 +91,15 @@ set-resources:
     mem_mb: 32000
     threads: 8
     cpus_per_task: 8
+  bwa_index_host:
+    mem_mb: 32000
+    threads: 8
+    cpus_per_task: 8
+  host_filter_paired:
+    mem_mb: 32000
+    threads: 12
+    cpus_per_task: 12
+  host_filter_unpaired:
+    mem_mb: 32000
+    threads: 12
+    cpus_per_task: 12

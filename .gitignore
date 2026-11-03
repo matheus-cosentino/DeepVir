@@ -1,42 +1,121 @@
-# Ignore results directory
+# =============================================================================
+# DeepVir 2.0 - Git Ignore Configuration
+# =============================================================================
+
+# Output & Results
 results/
+**/results/
 
-# Ignore centralized execution logs (except .gitkeep if present)
-logs/*.log
-logs/*.yaml
-logs/*/
+# Centralized Execution Logs
+logs/
+**/logs/
+*.log
 
-# Ignore raw data
+# Raw Sequencing Data & Samples
 raw_data/
-data/contigs/
-data/raw_data/
+**/raw_data/
 data/
+**/data/
 
-# Ignore resources databases inside pipeline/resources/
-pipeline/resources/database/
-pipeline/resources/megan/
+# =============================================================================
+# Reference Databases (Remove all local and downloaded databases from git)
+# =============================================================================
+db/
+**/db/
+databases/
+**/databases/
+
+# Resource database directories (both in root and pipeline/)
+resources/diamond/
+resources/kraken2/
+resources/taxonomy/
+resources/krona/
+resources/rvdb/
+resources/megan/
+resources/host/
+resources/basta_db/
+resources/database/
+
+pipeline/resources/diamond/
+pipeline/resources/kraken2/
 pipeline/resources/taxonomy/
 pipeline/resources/krona/
 pipeline/resources/rvdb/
-pipeline/resources/diamond/
-pipeline/resources/kraken2/
-db/
+pipeline/resources/megan/
+pipeline/resources/host/
+pipeline/resources/basta_db/
+pipeline/resources/database/
 
-# Ignore .snakemake working cache
+# Database file formats & index patterns
+*.dmnd
+*.k2d
+*.kmer_distrib
+ktaxonomy.tsv
+seqid2taxid.map
+k2_*.tar.gz
+
+*.dmp
+taxdump.tar.gz
+prot.accession2taxid.gz
+
+*.hmm
+*.hmm.xz
+*.h3m
+*.h3i
+*.h3f
+*.h3p
+
+*.sqlite
+*.sqlite.xz
+*.db
+*.db.zip
+megan-map*
+U-RVDB*
+
+# BWA index files and genome downloads
+*.bwt
+*.pac
+*.sa
+*.amb
+*.ann
+
+# Krona database indexes
+accession2taxid.sorted
+taxonomy.tab
+
+# Whitelist: preserve repository logos and palm_annot embedded script models
+!pipeline/resources/logo/**
+!resources/logo/**
+!pipeline/workflow/scripts/palm_annot/**
+
+# =============================================================================
+# Environment, Cache & Temporary Files
+# =============================================================================
+# Snakemake cache & metadata
 .snakemake/
-pipeline/.snakemake/
+**/.snakemake/
+.snakemake-workflow.yaml
 
-# Ignore paper & test folders
+# Conda runtime cache & temporary environments
+.deepvir_conda/
+~/.deepvir_conda/
+
+# Paper & Test folders
 paper/
 test_run/
 
-# Python cache
+# Python byte-code & caches
 **/__pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Dynamic run overrides
+# Operating system / IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Dynamic Snakemake overrides
 run_overrides.yaml
 pipeline/run_overrides.yaml
-.snakemake-workflow.yaml

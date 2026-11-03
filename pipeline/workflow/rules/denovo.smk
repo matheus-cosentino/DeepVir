@@ -25,11 +25,11 @@ rule spades:
         r2 = get_denovo_r2,
         extra = get_denovo_unpaired
     output:
-        contigs = os.path.join(OUT_DIR, "{sample}", "spades", "kmer_{kmer_val}", "contigs.fasta")
+        contigs = os.path.join(OUT_DIR, "{sample}", "spades", "kmer_{kmer_val}", "{sample}_spades_k{kmer_val}.fasta")
     log:
-        os.path.join(LOG_DIR, "{sample}", "kmer_{kmer_val}_spades_assembly.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_spades_k{kmer_val}.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "spades", "{sample}_k{kmer_val}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "spades", "{sample}_spades_k{kmer_val}.tsv")
     params:
         outdir = lambda w, output: os.path.dirname(output.contigs),
         input_args = get_spades_params,
@@ -54,6 +54,11 @@ rule spades:
             -k {params.kmer} \
             --only-assembler \
             > {log} 2>&1
+        if [ -f "{params.outdir}/contigs.fasta" ]; then
+            cp -f "{params.outdir}/contigs.fasta" "{output.contigs}"
+        else
+            touch "{output.contigs}"
+        fi
         """
 
 ###############################
@@ -66,11 +71,11 @@ rule megahit:
         r2 = get_denovo_r2,
         extra = get_denovo_unpaired
     output:
-        contigs = os.path.join(OUT_DIR, "{sample}", "megahit", "final.contigs.fa")
+        contigs = os.path.join(OUT_DIR, "{sample}", "megahit", "{sample}_megahit.fasta")
     log:
-        os.path.join(LOG_DIR, "{sample}", "meghit_assembly.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_megahit.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "megahit", "{sample}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "megahit", "{sample}_megahit.tsv")
     params:
         outdir = lambda w, output: os.path.dirname(output.contigs),
         input_args = get_megahit_params,
@@ -91,6 +96,11 @@ rule megahit:
         
         cp -rf "$tmp_megahit_out"/* "{params.outdir}/"
         rm -rf "$tmp_megahit_out"
+        if [ -f "{params.outdir}/final.contigs.fa" ]; then
+            cp -f "{params.outdir}/final.contigs.fa" "{output.contigs}"
+        else
+            touch "{output.contigs}"
+        fi
         """
 
 
@@ -106,11 +116,11 @@ rule flye:
     input:
         reads = get_ONP_input
     output:
-        contigs = os.path.join(OUT_DIR, "{sample}", "flye", "assembly.fasta")
+        contigs = os.path.join(OUT_DIR, "{sample}", "flye", "{sample}_flye.fasta")
     log:
-        os.path.join(LOG_DIR, "{sample}", "flye_assembly.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_flye.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "flye", "{sample}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "flye", "{sample}_flye.tsv")
     params:
         outdir = lambda w, output: os.path.dirname(output.contigs),
         extra = config["flye"]["type"]
@@ -128,6 +138,11 @@ rule flye:
          --threads {resources.threads} \
          --meta \
          > {log} 2>&1
+        if [ -f "{params.outdir}/assembly.fasta" ]; then
+            cp -f "{params.outdir}/assembly.fasta" "{output.contigs}"
+        else
+            touch "{output.contigs}"
+        fi
         """
 
 #############################
@@ -142,11 +157,11 @@ rule raven:
     input:
         reads = get_ONP_input
     output:
-        contigs = os.path.join(OUT_DIR, "{sample}", "raven", "assembly.fasta")
+        contigs = os.path.join(OUT_DIR, "{sample}", "raven", "{sample}_raven.fasta")
     log:
-        os.path.join(LOG_DIR, "{sample}", "raven_assembly.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_raven.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "raven", "{sample}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "raven", "{sample}_raven.tsv")
     conda:
         RAVEN_ENV
     shell:
@@ -162,17 +177,17 @@ rule raven:
 rule medaka_polish:
     input:
         reads = get_ONP_input,
-        draft = os.path.join(OUT_DIR, "{sample}", "{assembler}", "assembly.fasta")
+        draft = os.path.join(OUT_DIR, "{sample}", "{assembler}", "{sample}_{assembler}.fasta")
     output:
-        consensus = os.path.join(OUT_DIR, "{sample}", "medaka_{assembler}", "consensus.fasta")
+        consensus = os.path.join(OUT_DIR, "{sample}", "medaka_{assembler}", "{sample}_medaka_polish_{assembler}.fasta")
     params:
         # Defina o modelo aqui ou no config.yaml
         model = config["medaka_model"],
         outdir = lambda w, output: os.path.dirname(output.consensus)
     log:
-        os.path.join(LOG_DIR, "{sample}", "medaka_{assembler}.log")
+        os.path.join(LOG_DIR, "{sample}", "{sample}_medaka_polish_{assembler}.log")
     benchmark:
-        os.path.join(OUT_DIR, "benchmarks", "medaka_polish", "{sample}_{assembler}.tsv")
+        os.path.join(OUT_DIR, "benchmarks", "medaka_polish", "{sample}_medaka_polish_{assembler}.tsv")
     conda:
         MEDAKA_ENV
     shell:
@@ -184,5 +199,9 @@ rule medaka_polish:
                          -t {resources.threads} \
                          -m {params.model} \
         > {log} 2>&1
-        
+        if [ -f "{params.outdir}/consensus.fasta" ]; then
+            cp -f "{params.outdir}/consensus.fasta" "{output.consensus}"
+        else
+            touch "{output.consensus}"
+        fi
         """

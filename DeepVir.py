@@ -3,7 +3,7 @@
 DeepVir.py - Universal Multi-Platform Python Executor (Windows+WSL, macOS, Linux)
 =================================================================================
 Author: MSc. Matheus Cosentino / DeepVir Team
-Version: 1.0 | 09.2026
+Version: 2.0 | 10.2026
 
 Project Directory Architecture:
   1. pipeline/ -> Core Snakemake workflow, rules, envs, configs, profiles, GUI & resources
@@ -172,11 +172,36 @@ def generate_sample_list(
 # =============================================================================
 # 2. EXTERNAL DATABASE LINKING (INTO pipeline/resources/)
 # =============================================================================
-def setup_resources(diamond_db: str = "", kraken2_db: str = "") -> None:
+def setup_resources(diamond_db: str = "", kraken2_db: str = "", runtime: str = "linux") -> None:
     """
     Links external DIAMOND (.dmnd) and Kraken2 database directories into `pipeline/resources/`.
+    Also cleans up any broken symlinks in `pipeline/resources/diamond` and `pipeline/resources/kraken2`
+    so default database auto-download rules can create directories cleanly.
     """
     res_dir = PIPELINE_DIR / "resources"
+    target_dia = res_dir / "diamond"
+    target_k2 = res_dir / "kraken2"
+
+    # Clean up broken symlinks for resources/diamond and resources/kraken2
+    for target in (target_dia, target_k2):
+        if not target.is_dir():
+            print(f"[INFO] Cleaning up non-directory or broken symlink at: {target}", flush=True)
+            try:
+                target.unlink(missing_ok=True)
+            except OSError:
+                pass
+            if runtime == "windows_wsl":
+                subprocess.run(["wsl", "rm", "-rf", to_engine_path(str(target), runtime)], check=False)
+            target.mkdir(parents=True, exist_ok=True)
+
+    if target_dia.is_dir():
+        for entry in list(target_dia.iterdir()):
+            try:
+                if entry.is_symlink() and not entry.exists():
+                    print(f"[INFO] Removing broken symlink inside diamond/: {entry.name}", flush=True)
+                    entry.unlink()
+            except OSError:
+                pass
 
     if diamond_db:
         dia_path = to_host_path(diamond_db)
@@ -185,13 +210,12 @@ def setup_resources(diamond_db: str = "", kraken2_db: str = "") -> None:
         matches = list(parent.glob(f"{prefix}*")) if parent.exists() else []
         if matches:
             print("[INFO] Linking external Diamond DB files to pipeline/resources/diamond/...", flush=True)
-            target_dir = res_dir / "diamond"
-            target_dir.mkdir(parents=True, exist_ok=True)
-            for existing in target_dir.iterdir():
+            target_dia.mkdir(parents=True, exist_ok=True)
+            for existing in target_dia.iterdir():
                 if existing.is_file() or existing.is_symlink():
                     existing.unlink()
             for m in matches:
-                dest = target_dir / m.name
+                dest = target_dia / m.name
                 try:
                     dest.symlink_to(m.resolve())
                 except OSError:
@@ -199,12 +223,13 @@ def setup_resources(diamond_db: str = "", kraken2_db: str = "") -> None:
         else:
             print(f"[ERROR] Diamond DB files not found for prefix: {diamond_db}", flush=True)
             sys.exit(1)
+    else:
+        target_dia.mkdir(parents=True, exist_ok=True)
 
     if kraken2_db:
         k2_path = to_host_path(kraken2_db.rstrip("/\\"))
         if k2_path.is_dir():
             print("[INFO] Linking external Kraken2 DB to pipeline/resources/kraken2/...", flush=True)
-            target_k2 = res_dir / "kraken2"
             if target_k2.is_symlink() or target_k2.is_file():
                 target_k2.unlink()
             elif target_k2.is_dir():
@@ -216,6 +241,13 @@ def setup_resources(diamond_db: str = "", kraken2_db: str = "") -> None:
         else:
             print(f"[ERROR] Kraken2 directory not found: {kraken2_db}", flush=True)
             sys.exit(1)
+    else:
+        if not target_k2.is_dir():
+            try:
+                target_k2.unlink(missing_ok=True)
+            except OSError:
+                pass
+            target_k2.mkdir(parents=True, exist_ok=True)
 
 
 # =============================================================================
@@ -294,6 +326,7 @@ def generate_run_overrides(
         "modules:",
         f"  keep_download: {str(keep_download).lower()}",
         f"  download_only: {str(args.download_only).lower()}",
+        f"  host_filter: {str(args.host_filter).lower()}",
         f"  assembly: {str(args.assembly).lower()}",
         f"  kraken2: {str(args.kraken2).lower()}",
         f"  diamond: {str(args.diamond).lower()}",
@@ -301,6 +334,9 @@ def generate_run_overrides(
         f"  rvdb: {str(args.rvdb).lower()}",
         f"  reads_kraken2: {str(args.reads_kraken).lower()}",
         f"  reads_diamond: {str(args.reads_diamond).lower()}",
+        "",
+        "host_filter:",
+        f'  accession: "{args.host_accession.strip() or "GCA_022682495.2"}"',
     ]
 
     if args.assembler:
@@ -319,6 +355,14 @@ def generate_run_overrides(
             lines.append(f"  length_required: {args.fastp_length}")
         if args.fastp_quality:
             lines.append(f"  qualified_quality_phred: {args.fastp_quality}")
+
+    if args.rdrp_minscore is not None:
+        minscore_val = int(args.rdrp_minscore) if float(args.rdrp_minscore).is_integer() else float(args.rdrp_minscore)
+        lines.append("")
+        lines.append("palm_annot:")
+        lines.append('  seqtype: "aa"')
+        lines.append(f"  minscore: {minscore_val}")
+        lines.append("  minpssmscore: 10")
 
     yaml_text = "\n".join(lines) + "\n"
     run_overrides.write_text(yaml_text, encoding="utf-8", newline="\n")
@@ -408,13 +452,33 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fastp-quality", "--fastp-qual", "--quality-phred", type=int, default=None)
     parser.add_argument("--temp-dir", default="", help="Scratch directory for temporary files and workdir")
     parser.add_argument("--workdir", default="", help="Override Snakemake working directory")
+    parser.add_argument("--conda-prefix", default="", help="Persistent directory for Snakemake Conda environments")
 
     # Module toggles
+    parser.add_argument(
+        "--host-filter",
+        action="store_true",
+        help="Filter out host reads via BWA against one or more NCBI host genome accessions",
+    )
+    parser.add_argument(
+        "--host-accession",
+        "--host-accessions",
+        default="GCA_022682495.2,GCF_000819615.1",
+        help="One or more comma-separated NCBI Genome Assembly Accessions for host/control filtering (default: GCA_022682495.2,GCF_000819615.1 for Desmodus rotundus + PhiX174)",
+    )
     parser.add_argument("--assembly", action="store_true", help="Enable De Novo Assembly")
     parser.add_argument("--assembler", "--assemblers", "--denovo", default="", help="Comma-separated assemblers")
     parser.add_argument("--kraken2", action="store_true", help="Enable Kraken2 Contigs Taxonomy")
     parser.add_argument("--diamond", action="store_true", help="Enable DIAMOND Contigs Taxonomy")
     parser.add_argument("--darkmatter", action="store_true", help="Enable PalmAnnot / Dark Matter module")
+    parser.add_argument(
+        "--rdrp-minscore",
+        "--minscore",
+        dest="rdrp_minscore",
+        type=float,
+        default=None,
+        help="Minimum RdRp score threshold (0-100) for PalmAnnot dark matter discovery (default: 75)",
+    )
     parser.add_argument("--rvdb", action="store_true", help="Enable RVDB validation on dark matter ORFs")
     parser.add_argument("--download-only", action="store_true", help="Only download SRA data")
     parser.add_argument("--remove-download", action="store_true", help="Remove downloaded SRA files after run")
@@ -425,7 +489,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("-n", "--dry-run", action="store_true", help="Perform Snakemake dry-run only")
     parser.add_argument("-g", "--gui", action="store_true", help="Launch Desktop GUI")
     parser.add_argument("--update-env", action="store_true", help="Update DeepVir Conda environment")
-    parser.add_argument("-v", "--version", action="version", version="DeepVir v1.0 (Universal Python Executor) | 09.2026")
+    parser.add_argument("-v", "--version", action="version", version="DeepVir v2.0 (Universal Python Executor) | 10.2026")
     return parser
 
 
@@ -492,8 +556,8 @@ def main() -> int:
         flush=True,
     )
 
-    # 1. Setup external databases if provided
-    setup_resources(args.diamond_db, args.kraken2_db)
+    # 1. Setup external databases if provided (and sanitize broken symlinks)
+    setup_resources(args.diamond_db, args.kraken2_db, runtime)
 
     # 2. Generate sample list in pure Python
     sample_list_path = generate_sample_list(args.input, args.output, args.sra, args.sra_list)
@@ -547,7 +611,19 @@ def main() -> int:
 
     job_id = os.environ.get("SLURM_JOB_ID", "local")
     shadow_dir = f"{temp_dir}/deepvir_shadow/{job_id}"
-    conda_dir = f"{temp_dir}/deepvir_conda"
+
+    # Persistent Conda prefix: never store inside volatile /tmp unless explicitly requested,
+    # because /tmp is wiped on every WSL shutdown or Linux reboot!
+    if args.conda_prefix.strip():
+        conda_dir = to_engine_path(args.conda_prefix.strip(), runtime)
+    elif temp_dir.startswith("/tmp"):
+        if runtime == "windows_wsl":
+            conda_dir = f"/home/{user}/.deepvir_conda"
+        else:
+            home_posix = to_engine_path(str(Path.home()), runtime)
+            conda_dir = f"{home_posix}/.deepvir_conda"
+    else:
+        conda_dir = f"{temp_dir}/deepvir_conda"
 
     if runtime == "windows_wsl":
         subprocess.run(["wsl", "mkdir", "-p", snakemake_workdir, shadow_dir, conda_dir, logs_posix], check=False)

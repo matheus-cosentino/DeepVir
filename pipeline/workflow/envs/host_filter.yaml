@@ -1,0 +1,13 @@
+name: host_filter
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - bwa=0.7.18
+  - samtools=1.21
+  - ncbi-datasets-cli>=16.0
+  - unzip
+  - pigz
+  - python>=3.10
+

@@ -1,7 +1,7 @@
 ---
 title: "Discovery Module Report"
 subtitle: "Sample **`r params$sample_name`**"
-author: "MSc. Matheus Cosentino DeepVir v.1.0"
+author: "MSc. Matheus Cosentino DeepVir v.2.0"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output: 
   html_document:
