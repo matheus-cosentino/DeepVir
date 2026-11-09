@@ -26,25 +26,22 @@ conda env create -f pipeline/workflow/envs/DeepVir.yaml
 
 ## 2. Quick Start: Test Databases
 
-If you are testing the pipeline and do not want to download massive production databases right away, you can build a lightweight *E. coli* K-12 proteome database for DIAMOND and download the RefSeq Viral database for Kraken2.
+If you do not provide a database, DeepVir automatically downloads the defaults on first run: the **RVDB protein FASTA** (`U-RVDBv32.0-prot.fasta.xz`) built into a DIAMOND database (`resources/diamond/rvdb_prot.dmnd`), and the RefSeq Viral database for Kraken2. To build the DIAMOND database manually:
 
-### Step 2.1: E. coli K-12 DIAMOND Database
+### Step 2.1: RVDB Protein DIAMOND Database
+
+RVDB FASTA headers follow `>acc|<p_bank>|<p_acc>|<n_bank>|<n_acc>|<descr[sp]>` (protein source, original nucleotide source, protein description and species). The protein accession (`p_acc`) is used for taxonomy mapping.
 
 ```bash
-# Create directory
 mkdir -p db/diamond && cd db/diamond
 
-# Download the E. coli K-12 proteome from UniProt
-wget "https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=(organism_id:83333)" -O ecoli_proteome.fasta
+wget https://rvdb-prot.pasteur.fr/files/U-RVDBv32.0-prot.fasta.xz
+xz -dc U-RVDBv32.0-prot.fasta.xz > U-RVDBv32.0-prot.fasta
 
-# Format the FASTA header to keep only the protein accession ID
-awk -F'|' '/^>/ {print ">"$2} !/^>/ {print $0}' ecoli_proteome.fasta > ecoli_formatted.fasta
+# Build the DIAMOND database (keep original headers)
+diamond makedb --in U-RVDBv32.0-prot.fasta -d rvdb_prot
 
-# Build the DIAMOND database
-diamond makedb --in ecoli_formatted.fasta -d ecoli_db
-
-# Remove temporary FASTA files
-rm -rf ecoli_proteome.fasta ecoli_formatted.fasta
+rm -f U-RVDBv32.0-prot.fasta.xz U-RVDBv32.0-prot.fasta
 cd ../../
 ```
 

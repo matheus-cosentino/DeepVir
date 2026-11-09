@@ -40,6 +40,8 @@ from scripts.functions import get_input_r1
 from scripts.functions import get_input_r2
 from scripts.functions import get_input_unp
 from scripts.functions import get_contigs_path
+from scripts.functions import get_darkmatter_lineages_path
+from scripts.functions import get_darkmatter_nohits_path
 from scripts.functions import get_denovo_r1
 from scripts.functions import get_denovo_r2
 from scripts.functions import get_denovo_unpaired
@@ -117,6 +119,8 @@ functions.get_input_r1 = get_input_r1
 functions.get_input_r2 = get_input_r2
 functions.get_input_unp = get_input_unp
 functions.get_contigs_path = get_contigs_path
+functions.get_darkmatter_lineages_path = get_darkmatter_lineages_path
+functions.get_darkmatter_nohits_path = get_darkmatter_nohits_path
 functions.get_denovo_r1 = get_denovo_r1
 functions.get_denovo_r2 = get_denovo_r2
 functions.get_denovo_unpaired = get_denovo_unpaired
@@ -161,6 +165,8 @@ R_RAREFACTION = _env_path(config["envs"]["r_rarefaction"])
 HMMER = _env_path(config["envs"]["hmmer"])
 MEGAN = _env_path(config["envs"]["megan"])
 HOST_FILTER = _env_path(config["envs"].get("host_filter", "envs/host_filter.yaml"))
+NANOPORE_ENV = _env_path(config["envs"].get("nanopore", "envs/nanopore.yaml"))
+QC_UNPAIRED_ENV = NANOPORE_ENV if (config.get("platform") == "nanopore" or (isinstance(config.get("nanopore"), dict) and config.get("nanopore", {}).get("qc", {}).get("tool", "") == "chopper")) else FASTP
 
 
 #######################################

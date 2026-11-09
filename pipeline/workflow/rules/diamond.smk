@@ -15,26 +15,25 @@
 #                         version: 1.0  |  09.2026                              #
 ###################################################################################
 
-rule download_default_diamond_db:
-  """
-  Automatically downloads and builds the base E. coli K-12 DIAMOND database
-  (from the First Time Local Usage tutorial) on first run when no external
-  or pre-existing DIAMOND database is present in resources/diamond/.
-  """
+#########################################################################
+# --- Default DIAMOND DB (RVDB protein FASTA): download > unpack > cd-hit > makedb --- #
+#########################################################################
+# Runs on first use only, when no external/pre-existing DIAMOND DB is present
+# in resources/diamond/. RVDB headers: >acc|p_bank|p_acc|n_bank|n_acc|descr[sp]
+
+rule download_rvdb_prot_fasta:
+  """Step 1/4: download the RVDB protein FASTA (xz-compressed)."""
   output:
-    dmnd = os.path.join(RESOURCES_DIR, "diamond", "ecoli_db.dmnd")
+    xz = temp(os.path.join(RESOURCES_DIR, "diamond", "U-RVDBv32.0-prot.fasta.xz"))
   params:
     db_dir = os.path.join(RESOURCES_DIR, "diamond"),
-    db_prefix = os.path.join(RESOURCES_DIR, "diamond", "ecoli_db"),
-    raw_fasta = os.path.join(RESOURCES_DIR, "diamond", "ecoli_proteome.fasta"),
-    fmt_fasta = os.path.join(RESOURCES_DIR, "diamond", "ecoli_formatted.fasta"),
-    url = "https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=(organism_id:83333)"
+    url = "https://rvdb-prot.pasteur.fr/files/U-RVDBv32.0-prot.fasta.xz"
   log:
-    os.path.join(LOG_DIR, "workflow", "download_default_diamond_db.log")
+    os.path.join(LOG_DIR, "workflow", "download_rvdb_prot_fasta.log")
   benchmark:
-    os.path.join(OUT_DIR, "benchmarks", "download_default_diamond_db", "ecoli_db.tsv")
+    os.path.join(OUT_DIR, "benchmarks", "download_rvdb_prot_fasta", "download_rvdb_prot_fasta.tsv")
   conda:
-    DIAMOND
+    DOWNLOAD
   shell:
     """
     mkdir -p "$(dirname "{log}")"
@@ -46,18 +45,84 @@ rule download_default_diamond_db:
         fi
     fi
     mkdir -p "{params.db_dir}"
-    echo "[INFO] No external DIAMOND DB found. Downloading base E. coli K-12 proteome from UniProt..."
+    echo "[INFO] No external DIAMOND DB found. Downloading default RVDB protein FASTA..."
+    rm -f "{output.xz}"
     if command -v wget >/dev/null 2>&1; then
-        wget "{params.url}" -O "{params.raw_fasta}"
+        wget "{params.url}" -O "{output.xz}"
     else
-        curl -sSL "{params.url}" -o "{params.raw_fasta}"
+        curl -sSL "{params.url}" -o "{output.xz}"
     fi
-    echo "[INFO] Formatting FASTA headers to keep protein accession IDs..."
-    awk -F'|' '/^>/ {{print ">"$2}} !/^>/ {{print $0}}' "{params.raw_fasta}" > "{params.fmt_fasta}"
-    echo "[INFO] Building base DIAMOND database: {output.dmnd}"
-    diamond makedb --in "{params.fmt_fasta}" -d "{params.db_prefix}"
-    rm -f "{params.raw_fasta}" "{params.fmt_fasta}"
-    echo "[INFO] Base E. coli K-12 DIAMOND database ready at {output.dmnd}"
+    echo "[INFO] Download complete: {output.xz}"
+    """
+
+rule unpack_rvdb_prot_fasta:
+  """Step 2/4: decompress the RVDB protein FASTA (.xz -> .fasta)."""
+  input:
+    xz = rules.download_rvdb_prot_fasta.output.xz
+  output:
+    fasta = temp(os.path.join(RESOURCES_DIR, "diamond", "U-RVDBv32.0-prot.fasta"))
+  log:
+    os.path.join(LOG_DIR, "workflow", "unpack_rvdb_prot_fasta.log")
+  benchmark:
+    os.path.join(OUT_DIR, "benchmarks", "unpack_rvdb_prot_fasta", "unpack_rvdb_prot_fasta.tsv")
+  conda:
+    DOWNLOAD
+  shell:
+    """
+    mkdir -p "$(dirname "{log}")"
+    exec > "{log}" 2>&1
+    echo "[INFO] Decompressing {input.xz}..."
+    xz -dc "{input.xz}" > "{output.fasta}"
+    echo "[INFO] Unpacked FASTA: {output.fasta}"
+    """
+
+rule cd_hit_rvdb_prot_fasta:
+  """Step 3/4: cluster RVDB protein FASTA at 90% identity using cd-hit to reduce redundancy."""
+  input:
+    fasta = rules.unpack_rvdb_prot_fasta.output.fasta
+  output:
+    fasta = temp(os.path.join(RESOURCES_DIR, "diamond", "U-RVDBv32.0-prot_nr90.fasta")),
+    clstr = temp(os.path.join(RESOURCES_DIR, "diamond", "U-RVDBv32.0-prot_nr90.fasta.clstr"))
+  params:
+    c = 0.90,      # 90% sequence identity threshold
+#    aS = 0.90,     # alignment coverage for the shorter sequence
+    d = 0          # keep full fasta header description (>acc|p_bank|p_acc|n_bank|n_acc|descr[sp])
+  log:
+    os.path.join(LOG_DIR, "workflow", "cd_hit_rvdb_prot_fasta.log")
+  benchmark:
+    os.path.join(OUT_DIR, "benchmarks", "cd_hit_rvdb_prot_fasta", "cd_hit_rvdb_prot_fasta.tsv")
+  conda:
+    PALM
+  shell:
+    """
+    mkdir -p "$(dirname "{log}")"
+    exec > "{log}" 2>&1
+    echo "[INFO] Running cd-hit on {input.fasta} (identity: {params.c})..."
+    cd-hit -i "{input.fasta}" -o "{output.fasta}" -c {params.c} -M { .mem_mb} -d {params.d} -T {resources.threads}
+    echo "[INFO] Redundancy reduction complete: {output.fasta}"
+    """
+
+rule makedb_rvdb_prot_diamond:
+  """Step 4/4: build the default DIAMOND database (rvdb_prot.dmnd) from non-redundant FASTA."""
+  input:
+    fasta = rules.cd_hit_rvdb_prot_fasta.output.fasta
+  output:
+    dmnd = os.path.join(RESOURCES_DIR, "diamond", "rvdb_prot.dmnd")
+  params:
+    db_prefix = os.path.join(RESOURCES_DIR, "diamond", "rvdb_prot")
+  log:
+    os.path.join(LOG_DIR, "workflow", "makedb_rvdb_prot_diamond.log")
+  benchmark:
+    os.path.join(OUT_DIR, "benchmarks", "makedb_rvdb_prot_diamond", "makedb_rvdb_prot_diamond.tsv")
+  conda:
+    DIAMOND
+  shell:
+    """
+    mkdir -p "$(dirname "{log}")"
+    exec > "{log}" 2>&1
+    echo "[INFO] Building default DIAMOND database: {output.dmnd}"
+    diamond makedb --in "{input.fasta}" -d "{params.db_prefix}" --threads {threads}
+    echo "[INFO] Default RVDB protein DIAMOND database ready at {output.dmnd}"
     """
 
 rule filter_contigs_diamond:

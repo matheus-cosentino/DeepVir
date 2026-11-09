@@ -69,19 +69,42 @@ rule fastp_unpaired:
     benchmark:
         os.path.join(OUT_DIR, "benchmarks", "fastp_unpaired", "{sample}_fastp_unpaired.tsv")
     params:
-        length_required=lambda wc: config['fastp']['length_required'][0] if isinstance(config['fastp']['length_required'], (list, tuple)) else config['fastp']['length_required'],
-        quality=lambda wc: config['fastp']['qualified_quality_phred'][0] if isinstance(config['fastp']['qualified_quality_phred'], (list, tuple)) else config['fastp']['qualified_quality_phred']
+        is_nanopore = lambda wc: (config.get("platform") == "nanopore") or (isinstance(config.get("nanopore"), dict) and config.get("nanopore", {}).get("qc", {}).get("tool", "") == "chopper"),
+        length_required = lambda wc: (config.get("nanopore", {}).get("min_read_len", 500) if isinstance(config.get("nanopore"), dict) else 500) if config.get("platform") == "nanopore" else (config['fastp']['length_required'][0] if isinstance(config['fastp']['length_required'], (list, tuple)) else config['fastp']['length_required']),
+        quality = lambda wc: (config.get("nanopore", {}).get("qc", {}).get("min_qual", 10) if isinstance(config.get("nanopore"), dict) else 10) if config.get("platform") == "nanopore" else (config['fastp']['qualified_quality_phred'][0] if isinstance(config['fastp']['qualified_quality_phred'], (list, tuple)) else config['fastp']['qualified_quality_phred'])
     conda:
-        FASTP
+        QC_UNPAIRED_ENV
     shell:
         """
-        fastp \
-            --in1 {input.reads} --out1 {output.r1} \
-            --html {output.html} \
-            --json {output.json} \
-            --thread {resources.threads} \
-            --length_required {params.length_required} \
-            --qualified_quality_phred {params.quality} \
-            --dedup --trim_poly_g --trim_poly_x \
-            2> {log}
+        mkdir -p "$(dirname "{output.r1}")"
+        mkdir -p "$(dirname "{log}")"
+        exec > "{log}" 2>&1
+
+        if [ "{params.is_nanopore}" = "True" ] || [ "{params.is_nanopore}" = "true" ]; then
+            echo "[INFO] Nanopore platform detected: Running Chopper for Long-Read QC & Length/Quality Filtering..."
+            echo "[INFO] Parameters: Min Length = {params.length_required} bp, Min Phred Quality = Q{params.quality}"
+            
+            if [[ "{input.reads}" == *.gz ]]; then
+                gzip -cd "{input.reads}" | chopper -q {params.quality} -l {params.length_required} --threads {resources.threads} | gzip -c > "{output.r1}"
+            else
+                cat "{input.reads}" | chopper -q {params.quality} -l {params.length_required} --threads {resources.threads} | gzip -c > "{output.r1}"
+            fi
+
+            RAW_COUNT=$(gzip -cd "{input.reads}" 2>/dev/null | grep -c "^@" || wc -l < "{input.reads}" || echo "0")
+            CLEAN_COUNT=$(gzip -cd "{output.r1}" 2>/dev/null | grep -c "^@" || echo "0")
+            
+            echo "{{\\"summary\\": {{\"tool\\": \\"chopper\\", \\"raw_reads\\": $RAW_COUNT, \\"clean_reads\\": $CLEAN_COUNT, \\"min_qual\\": {params.quality}, \\"min_len\\": {params.length_required}}}}}" > "{output.json}"
+            echo "<html><body><h2>Chopper Nanopore QC Summary</h2><p>Sample: {wildcards.sample}</p><p>Tool: Chopper (Rust long-read filter)</p><p>Filtered reads saved to {output.r1}</p></body></html>" > "{output.html}"
+            echo "[INFO] Chopper QC complete. Output: {output.r1}"
+        else
+            echo "[INFO] Running fastp for Illumina short-read quality trimming..."
+            fastp \
+                --in1 {input.reads} --out1 {output.r1} \
+                --html {output.html} \
+                --json {output.json} \
+                --thread {resources.threads} \
+                --length_required {params.length_required} \
+                --qualified_quality_phred {params.quality} \
+                --dedup --trim_poly_g --trim_poly_x
+        fi
         """

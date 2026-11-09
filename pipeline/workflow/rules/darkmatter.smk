@@ -15,6 +15,12 @@
 #                         version: 1.0  |  09.2026                              #
 ###################################################################################
 
+from scripts.functions import (
+    get_contigs_path,
+    get_darkmatter_lineages_path,
+    get_darkmatter_nohits_path,
+    get_denovo_unpaired,
+)
 
 ######################################################
 # --- 1. Filter Contig Fasta With no Diamond Hit --- #
@@ -45,6 +51,8 @@ rule get_nohit_fasta:
 # --- 2. Find Orfs for the no Hits Contigs --- #
 ################################################ 
 rule find_orfs:
+  wildcard_constraints:
+    tool = r"spades_k[\w]+|spades|megahit|flye|raven|medaka_flye|medaka_raven|pre_assembled"
   input: 
     fasta = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_get_nohit_fasta_{tool}.fasta")
   output:
@@ -81,6 +89,117 @@ rule find_orfs:
         rm -f "$tmp_file" "$tmp_file.bak"
     done
     """
+
+###################################################################################
+# --- Nanopore Direct Read-Level Dark Matter (No Assembly Needed) --- #
+###################################################################################
+
+rule get_nohit_nanopore_reads:
+  """
+  Extracts unassigned 'dark reads' (reads with no DIAMOND hit) for Nanopore viral discovery.
+  """
+  input:
+    reads = get_denovo_unpaired,
+    diamond = os.path.join(OUT_DIR, "{sample}", "diamond_reads", "{sample}_append_lineage_reads.tsv")
+  output:
+    nohits = os.path.join(OUT_DIR, "{sample}", "darkmatter_nanopore_reads", "{sample}_nohit_nanopore_reads.fasta")
+  log:
+    os.path.join(LOG_DIR, "{sample}", "{sample}_get_nohit_nanopore_reads.log")
+  benchmark:
+    os.path.join(OUT_DIR, "benchmarks", "get_nohit_nanopore_reads", "{sample}_get_nohit_nanopore_reads.tsv")
+  params:
+    min_len = config.get("nanopore", {}).get("min_read_len", 500) if isinstance(config.get("nanopore"), dict) else 500
+  conda:
+    CORE
+  script:
+    "../scripts/filter_nohits_nanopore.py"
+
+rule nanopore_reads_consensus:
+  """
+  Strategy 1: Overlap all-vs-all & consensus back-mapping (minimap2 + racon)
+  to polish indels and eliminate frameshifts directly from reads.
+  """
+  input:
+    nohits = rules.get_nohit_nanopore_reads.output.nohits
+  output:
+    consensus = os.path.join(OUT_DIR, "{sample}", "darkmatter_nanopore_reads", "{sample}_consensus_nanopore_reads.fasta")
+  params:
+    enabled = config.get("nanopore", {}).get("consensus", True) if isinstance(config.get("nanopore"), dict) else True,
+    min_len = config.get("nanopore", {}).get("min_read_len", 500) if isinstance(config.get("nanopore"), dict) else 500
+  threads:
+    config.get("threads", 8)
+  log:
+    os.path.join(LOG_DIR, "{sample}", "{sample}_nanopore_reads_consensus.log")
+  benchmark:
+    os.path.join(OUT_DIR, "benchmarks", "nanopore_reads_consensus", "{sample}_nanopore_reads_consensus.tsv")
+  conda:
+    NANOPORE_ENV
+  shell:
+    """
+    mkdir -p "$(dirname "{output.consensus}")"
+    mkdir -p "$(dirname "{log}")"
+    exec > "{log}" 2>&1
+
+    if [ ! -s "{input.nohits}" ]; then
+        echo "[INFO] No dark reads available. Creating empty consensus file."
+        touch "{output.consensus}"
+        exit 0
+    fi
+
+    COUNT=$(grep -c "^>" "{input.nohits}" || true)
+    echo "[INFO] Found $COUNT dark reads for Nanopore consensus."
+
+    if [ "{params.enabled}" = "True" ] || [ "{params.enabled}" = "true" ]; then
+        if [ "$COUNT" -ge 2 ]; then
+            echo "[INFO] Running Strategy 1: minimap2 all-vs-all overlap..."
+            paf_file="$(dirname "{output.consensus}")/overlaps_{wildcards.sample}.paf"
+            racon_out="$(dirname "{output.consensus}")/racon_{wildcards.sample}.fasta"
+
+            minimap2 -x ava-ont -t {threads} "{input.nohits}" "{input.nohits}" > "$paf_file" 2>> "{log}" || true
+
+            if [ -s "$paf_file" ]; then
+                echo "[INFO] Running Racon back-mapping consensus polishing..."
+                racon -t {threads} -u "{input.nohits}" "$paf_file" "{input.nohits}" > "$racon_out" 2>> "{log}" || true
+            fi
+
+            if [ -s "$racon_out" ]; then
+                echo "[INFO] Racon consensus successfully generated."
+                mv "$racon_out" "{output.consensus}"
+            else
+                echo "[INFO] Insufficient overlaps for Racon; passing through length-filtered dark reads."
+                cp "{input.nohits}" "{output.consensus}"
+            fi
+            rm -f "$paf_file" "$racon_out"
+        else
+            echo "[INFO] Single read present; passing through without all-vs-all."
+            cp "{input.nohits}" "{output.consensus}"
+        fi
+    else
+        echo "[INFO] Strategy 1 (consensus) disabled; using raw dark reads."
+        cp "{input.nohits}" "{output.consensus}"
+    fi
+    """
+
+rule nanopore_find_orfs_frameshift:
+  """
+  Strategy 2: Frameshift-tolerant 6-frame ORF prediction and indel stitching
+  to recover catalytic RdRp motifs (A, B, C) intact despite sequencing errors.
+  """
+  input:
+    fasta = rules.nanopore_reads_consensus.output.consensus
+  output:
+    orfs = temp(os.path.join(OUT_DIR, "{sample}", "darkmatter_nanopore_reads", "{sample}_find_orfs_nanopore_reads.fasta.temp"))
+  log:
+    os.path.join(LOG_DIR, "{sample}", "{sample}_nanopore_find_orfs_frameshift.log")
+  benchmark:
+    os.path.join(OUT_DIR, "benchmarks", "nanopore_find_orfs_frameshift", "{sample}_nanopore_find_orfs_frameshift.tsv")
+  params:
+    frameshift_mode = config.get("nanopore", {}).get("frameshift", True) if isinstance(config.get("nanopore"), dict) else True,
+    min_aa = 60
+  conda:
+    CORE
+  script:
+    "../scripts/frameshift_orf_finder.py"
 
 #######################################################
 # --- 3. Remove Redundancy from final Orfs Fasta --- #
@@ -159,7 +278,7 @@ rule fev2tsv_single:
 rule report_summarize:
     input:
         fasta = get_contigs_path,
-        lineages = os.path.join(OUT_DIR, "{sample}", "diamond_{tool}", "{sample}_append_lineage_{tool}.tsv"),
+        lineages = get_darkmatter_lineages_path,
         #basta_lca = os.path.join(OUT_DIR, "{sample}", "basta_{tool}", "{sample}_{tool}_lca.tsv"),
         dusk = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_fev2tsv_single_{tool}.tsv")
     output:

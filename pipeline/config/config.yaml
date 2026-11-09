@@ -85,6 +85,7 @@ envs:
   hmmer: "envs/hmmer.yaml"
   megan: "envs/megan.yaml"
   host_filter: "envs/host_filter.yaml"
+  nanopore: "envs/nanopore.yaml"
 
 
 ### databases and resources for the workflow
@@ -275,6 +276,17 @@ palm_annot:
   seqtype: "aa" 
   minscore: 75
   minpssmscore: 10
+
+# Nanopore / MinION Long-Read Discovery & Error-Correction Configuration
+platform: "illumina"  # Default platform: "illumina" or "nanopore"
+nanopore:
+  darkmatter: true       # Direct read-level dark matter search (bypasses broken de novo assemblies)
+  consensus: true        # Strategy 1: back-mapping & overlap consensus (minimap2 + racon)
+  frameshift: true       # Strategy 2: frameshift-tolerant ORF prediction and indel stitching
+  min_read_len: 500      # Minimum read length for Nanopore analysis
+  qc:
+    tool: "chopper"      # Gold standard QC & trimming tool for ONT long reads (replaces fastp)
+    min_qual: 10         # Minimum average Phred quality score (default: 10)
 
 # Medaka correction
 # --> DEFINE O MODELO ATIVO AQUI:

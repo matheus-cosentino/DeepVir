@@ -91,34 +91,52 @@ RULE_DEFINITIONS = [
 ]
 
 
+_AVAILABLE_FAMILIES = None
+_SCALABLE_FONT_CACHE = {}
+
+
+def _get_available_font_families(root: tk.Tk) -> tuple[list, dict]:
+    """Caches available system font families to avoid duplicate X11/OS font queries."""
+    global _AVAILABLE_FAMILIES
+    if _AVAILABLE_FAMILIES is None:
+        try:
+            available_list = list(tkfont.families(root))
+            available_dict = {f.lower(): f for f in available_list}
+            _AVAILABLE_FAMILIES = (available_list, available_dict)
+        except Exception:
+            _AVAILABLE_FAMILIES = ([], {})
+    return _AVAILABLE_FAMILIES
+
+
 def _family_actually_scales(root: tk.Tk, family: str) -> bool:
     """
     Tests whether `family` genuinely changes rendered pixel height between 10pt and 18pt
-    on the current display server.
+    on the current display server. Results are cached to avoid repeated X11 round-trips.
     """
     if not family:
         return False
+    if family in _SCALABLE_FONT_CACHE:
+        return _SCALABLE_FONT_CACHE[family]
     try:
         f_small = tkfont.Font(root=root, family=family, size=10)
         f_large = tkfont.Font(root=root, family=family, size=18)
-        return (
+        scales = (
             f_large.metrics("linespace") > f_small.metrics("linespace")
             or f_large.measure("DeepVir") > f_small.measure("DeepVir")
         )
+        _SCALABLE_FONT_CACHE[family] = scales
+        return scales
     except Exception:
+        _SCALABLE_FONT_CACHE[family] = False
         return False
 
 
 def select_ui_font_family(root: tk.Tk) -> str:
     """
     Selects a verified scalable UI font family on Windows, macOS, or Linux/WSL X11.
+    Uses candidate lookahead and caching to start the GUI in milliseconds.
     """
-    try:
-        available_list = list(tkfont.families(root))
-        available = {f.lower(): f for f in available_list}
-    except Exception:
-        available_list = []
-        available = {}
+    available_list, available = _get_available_font_families(root)
 
     try:
         default_actual = tkfont.nametofont("TkDefaultFont").actual("family")
@@ -142,9 +160,11 @@ def select_ui_font_family(root: tk.Tk) -> str:
     ]
 
     for cand in preferred:
-        actual_name = available.get(cand.lower(), cand)
-        if _family_actually_scales(root, actual_name):
-            return actual_name
+        low = cand.lower()
+        if low in available:
+            actual_name = available[low]
+            if _family_actually_scales(root, actual_name):
+                return actual_name
 
     for fam in available_list:
         if _family_actually_scales(root, fam):
@@ -157,12 +177,7 @@ def select_mono_font_family(root: tk.Tk) -> str:
     """
     Selects a verified scalable monospace font family for the terminal console.
     """
-    try:
-        available_list = list(tkfont.families(root))
-        available = {f.lower(): f for f in available_list}
-    except Exception:
-        available_list = []
-        available = {}
+    available_list, available = _get_available_font_families(root)
 
     try:
         fixed_actual = tkfont.nametofont("TkFixedFont").actual("family")
@@ -183,9 +198,11 @@ def select_mono_font_family(root: tk.Tk) -> str:
     ]
 
     for cand in preferred:
-        actual_name = available.get(cand.lower(), cand)
-        if _family_actually_scales(root, actual_name):
-            return actual_name
+        low = cand.lower()
+        if low in available:
+            actual_name = available[low]
+            if _family_actually_scales(root, actual_name):
+                return actual_name
 
     for fam in available_list:
         if _family_actually_scales(root, fam):
@@ -397,7 +414,8 @@ class DeepVirApp(tk.Tk):
         self.log_queue = queue.Queue()
         self.active_log_path = None
 
-        # Configure TTK styles and widget themes
+        # Configure Tk named fonts and TTK widget themes
+        self._apply_named_fonts()
         self.setup_styles()
 
         # Build all visual components, tabs, cards, and buttons
@@ -405,9 +423,6 @@ class DeepVirApp(tk.Tk):
 
         # Load initial profile resources from disk (`local`)
         self.load_profile_into_editor("local", silent=True)
-
-        # Apply initial font preset across all widgets
-        self.apply_font_preset()
 
         # Keyboard shortcuts for zooming font size (Ctrl + / Ctrl -)
         self.bind_all("<Control-plus>", lambda e: self.change_font_size(1))
@@ -442,12 +457,9 @@ class DeepVirApp(tk.Tk):
         self.zoom_index = new_idx
         self.apply_font_preset()
 
-    def apply_font_preset(self):
-        """Applies the active ZOOM_PRESETS entry to all named fonts, TTK styles, and tk widgets."""
+    def _apply_named_fonts(self):
+        """Updates Tk's built-in named fonts according to current zoom preset."""
         preset = ZOOM_PRESETS[self.zoom_index]
-        self.zoom_label_var.set(preset["label"])
-
-        # 1. Update Tk's built-in named fonts
         for named, tier, weight in [
             ("TkDefaultFont", "body", "normal"),
             ("TkTextFont", "body", "normal"),
@@ -466,6 +478,14 @@ class DeepVirApp(tk.Tk):
                 )
             except Exception:
                 pass
+
+    def apply_font_preset(self):
+        """Applies the active ZOOM_PRESETS entry to all named fonts, TTK styles, and tk widgets."""
+        preset = ZOOM_PRESETS[self.zoom_index]
+        self.zoom_label_var.set(preset["label"])
+
+        # 1. Update Tk's built-in named fonts
+        self._apply_named_fonts()
 
         # 2. Reconfigure TTK styles
         self.setup_styles()
@@ -794,15 +814,73 @@ class DeepVirApp(tk.Tk):
         canvas.bind_all("<Button-4>", _on_mousewheel)
         canvas.bind_all("<Button-5>", _on_mousewheel)
 
-        # 2-Column Responsive Layout inside scrollable container
-        left_col = ttk.Frame(container)
-        left_col.pack(side="left", fill="both", expand=True, padx=(0, 6))
+        # ---------------------------------------------------------------------
+        # Pipeline State Variables
+        # ---------------------------------------------------------------------
+        self.var_input = tk.StringVar(value=str(PROJECT_DIR / "data"))
+        self.var_output = tk.StringVar(value=str(PROJECT_DIR / "results"))
+        self.var_temp = tk.StringVar(value="/tmp")
+        self.mod_sra = tk.BooleanVar(value=False)
+        self.var_sra = tk.StringVar(value="")
+        self.mod_download_only = tk.BooleanVar(value=False)
+        self.mod_remove_download = tk.BooleanVar(value=False)
 
-        right_col = ttk.Frame(container)
-        right_col.pack(side="right", fill="both", expand=True, padx=(6, 0))
+        self.var_diamond_db = tk.StringVar(value="")
+        self.var_kraken2_db = tk.StringVar(value="")
+
+        self.var_profile = tk.StringVar(value="local")
+        self.var_jobs = tk.IntVar(value=8)
+
+        self.var_fastp_len = tk.IntVar(value=30)
+        self.var_fastp_qual = tk.IntVar(value=30)
+
+        self.var_platform = tk.StringVar(value="illumina")
+        self.mod_nanopore_dm = tk.BooleanVar(value=True)
+        self.mod_nanopore_consensus = tk.BooleanVar(value=True)
+        self.mod_nanopore_frameshift = tk.BooleanVar(value=True)
+        self.var_nanopore_min_len = tk.IntVar(value=500)
+
+        self.mod_host_filter = tk.BooleanVar(value=False)
+        self.var_host_accession = tk.StringVar(value="GCA_022682495.2, GCF_000819615.1")
+        self.mod_reads_kraken = tk.BooleanVar(value=False)
+        self.mod_reads_diamond = tk.BooleanVar(value=False)
+        self.mod_assembly = tk.BooleanVar(value=True)
+        self.mod_kraken2 = tk.BooleanVar(value=True)
+        self.mod_diamond = tk.BooleanVar(value=True)
+        self.mod_darkmatter = tk.BooleanVar(value=True)
+        self.var_rdrp_minscore = tk.IntVar(value=75)
+        self.mod_rvdb = tk.BooleanVar(value=False)
+
+        self.asm_spades = tk.BooleanVar(value=True)
+        self.asm_megahit = tk.BooleanVar(value=False)
+        self.asm_flye = tk.BooleanVar(value=False)
+        self.asm_raven = tk.BooleanVar(value=False)
+        self.asm_medaka_flye = tk.BooleanVar(value=False)
+        self.asm_medaka_raven = tk.BooleanVar(value=False)
 
         # ---------------------------------------------------------------------
-        # CARD 1: File & Directory Paths + Direct SRA Input
+        # 2-Column Responsive Layout with Interactive Resizable Divider Sash
+        # ---------------------------------------------------------------------
+        self.paned_config = tk.PanedWindow(
+            container,
+            orient="horizontal",
+            bg="#1e293b",
+            bd=0,
+            sashwidth=7,
+            sashrelief="groove",
+            sashpad=2,
+            opaqueresize=True,
+        )
+        self.paned_config.pack(fill="both", expand=True)
+
+        left_col = tk.Frame(self.paned_config, bg=COLOR_BG)
+        right_col = tk.Frame(self.paned_config, bg=COLOR_BG)
+
+        self.paned_config.add(left_col, minsize=340, stretch="always")
+        self.paned_config.add(right_col, minsize=340, stretch="always")
+
+        # ---------------------------------------------------------------------
+        # CARD 1: File & Directory Paths + SRA Data Source
         # ---------------------------------------------------------------------
         card_paths = tk.Frame(left_col, bg=COLOR_CARD, highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
         card_paths.pack(fill="x", pady=(0, 8))
@@ -812,22 +890,30 @@ class DeepVirApp(tk.Tk):
         lbl_paths_header.pack(anchor="w", padx=14, pady=(12, 8))
 
         # Raw FASTQ Input directory (--input)
-        self.var_input = tk.StringVar(value=str(PROJECT_DIR / "data"))
         self.create_path_row(card_paths, "Input Directory (--input):", self.var_input, is_folder=True)
 
         # Analysis Results Output directory (--output)
-        self.var_output = tk.StringVar(value=str(PROJECT_DIR / "results"))
         self.create_path_row(card_paths, "Output Directory (--output):", self.var_output, is_folder=True)
 
         # Temporary scratch directory (--temp-dir)
-        self.var_temp = tk.StringVar(value="/tmp")
         self.create_path_row(card_paths, "Temporary Scratch Directory (--temp-dir):", self.var_temp, is_folder=True)
 
-        # Direct SRA Accessions Text Box (New Feature: type or paste SRA IDs directly!)
-        sra_direct_frame = tk.Frame(card_paths, bg="#172033", highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
-        sra_direct_frame.pack(fill="x", padx=14, pady=(8, 6))
+        # SRA Main Checkbox Toggle
+        row_sra_toggle = tk.Frame(card_paths, bg=COLOR_CARD)
+        row_sra_toggle.pack(fill="x", padx=14, pady=(6, 4))
 
-        sra_top_row = tk.Frame(sra_direct_frame, bg="#172033")
+        chk_use_sra = ttk.Checkbutton(
+            row_sra_toggle,
+            text="Download & Process Data from NCBI SRA (--sra)",
+            variable=self.mod_sra,
+            command=self.on_sra_toggle,
+        )
+        chk_use_sra.pack(side="left")
+
+        # Collapsible SRA options container
+        self.frame_sra_container = tk.Frame(card_paths, bg="#172033", highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
+
+        sra_top_row = tk.Frame(self.frame_sra_container, bg="#172033")
         sra_top_row.pack(fill="x", padx=10, pady=(8, 2))
 
         lbl_sra_direct = tk.Label(
@@ -844,7 +930,7 @@ class DeepVirApp(tk.Tk):
         self.register_scalable(lbl_sra_count, "small", "bold")
         lbl_sra_count.pack(side="right")
 
-        sra_txt_box = tk.Frame(sra_direct_frame, bg="#172033")
+        sra_txt_box = tk.Frame(self.frame_sra_container, bg="#172033")
         sra_txt_box.pack(fill="x", padx=10, pady=(2, 6))
 
         self.txt_sra_direct = tk.Text(
@@ -882,47 +968,73 @@ class DeepVirApp(tk.Tk):
         btn_clear_sra.pack(fill="x")
 
         # Optional SRA Accessions file list (--sra)
-        self.var_sra = tk.StringVar(value="")
-        self.create_path_row(card_paths, "Or SRA Accessions File (--sra, optional .txt):", self.var_sra, is_folder=False)
+        self.create_path_row(self.frame_sra_container, "Or SRA Accessions File (--sra, optional .txt):", self.var_sra, is_folder=False)
+
+        # SRA Management options
+        sra_mgmt_row = tk.Frame(self.frame_sra_container, bg="#172033")
+        sra_mgmt_row.pack(fill="x", padx=14, pady=(4, 8))
+
+        chk_sra_dl_only = ttk.Checkbutton(
+            sra_mgmt_row,
+            text="Download SRA accessions only without running analysis (--download-only)",
+            variable=self.mod_download_only,
+        )
+        chk_sra_dl_only.pack(anchor="w", pady=2)
+
+        chk_sra_rm_raw = ttk.Checkbutton(
+            sra_mgmt_row,
+            text="Remove downloaded raw SRA archives after extraction (--remove-download)",
+            variable=self.mod_remove_download,
+        )
+        chk_sra_rm_raw.pack(anchor="w", pady=2)
+
+        # Initialize SRA frame visibility
+        self.on_sra_toggle()
 
         # ---------------------------------------------------------------------
-        # CARD 2: External Reference Databases
+        # CARD 2: External Reference Databases (Progressive Disclosure)
         # ---------------------------------------------------------------------
-        card_dbs = tk.Frame(left_col, bg=COLOR_CARD, highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
-        card_dbs.pack(fill="x", pady=6)
+        self.card_dbs = tk.Frame(left_col, bg=COLOR_CARD, highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
 
-        lbl_dbs_header = tk.Label(card_dbs, text="External Databases (Optional - Auto-Downloads Base DBs if Empty)", fg=COLOR_ACCENT, bg=COLOR_CARD)
+        lbl_dbs_header = tk.Label(self.card_dbs, text="External Reference Databases (Auto-Downloads if Blank)", fg=COLOR_ACCENT, bg=COLOR_CARD)
         self.register_scalable(lbl_dbs_header, "head", "bold")
         lbl_dbs_header.pack(anchor="w", padx=14, pady=(12, 4))
 
         lbl_dbs_sub = tk.Label(
-            card_dbs,
-            text="If left blank, DeepVir automatically downloads the base tutorial DBs on first run (E. coli K-12 DIAMOND & RefSeq Viral Kraken2):",
+            self.card_dbs,
+            text="Configured dynamically for active Kraken2 / DIAMOND modules (leave blank to auto-download default tutorial DBs):",
             fg=COLOR_MUTED,
             bg=COLOR_CARD,
         )
         self.register_scalable(lbl_dbs_sub, "small")
         lbl_dbs_sub.pack(anchor="w", padx=14, pady=(0, 6))
 
-        # DIAMOND binary database (.dmnd)
-        self.var_diamond_db = tk.StringVar(value="")
+        # Kraken2 taxonomic database frame
+        self.frame_kraken_db = tk.Frame(self.card_dbs, bg=COLOR_CARD)
+        self.create_path_row(self.frame_kraken_db, "Kraken2 Taxonomic Database (Folder):", self.var_kraken2_db, is_folder=True)
+        lbl_k2_hint = tk.Label(self.frame_kraken_db, text="  ↳ Auto-downloads RefSeq Viral Kraken2 DB (~500 MB) if left blank", fg=COLOR_MUTED, bg=COLOR_CARD)
+        self.register_scalable(lbl_k2_hint, "small")
+        lbl_k2_hint.pack(anchor="w", padx=14, pady=(0, 4))
+
+        # DIAMOND binary database frame
+        self.frame_diamond_db = tk.Frame(self.card_dbs, bg=COLOR_CARD)
         self.create_path_row(
-            card_dbs,
-            "DIAMOND Database (.dmnd):",
+            self.frame_diamond_db,
+            "DIAMOND Protein Database (.dmnd):",
             self.var_diamond_db,
             is_folder=False,
             filetypes=[("DIAMOND DB", "*.dmnd"), ("All Files", "*.*")],
         )
-
-        # Kraken2 taxonomic database directory
-        self.var_kraken2_db = tk.StringVar(value="")
-        self.create_path_row(card_dbs, "Kraken2 Database (Folder):", self.var_kraken2_db, is_folder=True)
+        lbl_dmnd_hint = tk.Label(self.frame_diamond_db, text="  ↳ Auto-downloads RVDB Viral Protein DB (~3.5 GB) if left blank", fg=COLOR_MUTED, bg=COLOR_CARD)
+        self.register_scalable(lbl_dmnd_hint, "small")
+        lbl_dmnd_hint.pack(anchor="w", padx=14, pady=(0, 4))
 
         # ---------------------------------------------------------------------
         # CARD 3: Execution Resources & Profile
         # ---------------------------------------------------------------------
         card_exec = tk.Frame(left_col, bg=COLOR_CARD, highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
         card_exec.pack(fill="x", pady=6)
+        self.card_exec = card_exec
 
         lbl_exec_header = tk.Label(card_exec, text="Resources & Snakemake Profile", fg=COLOR_ACCENT, bg=COLOR_CARD)
         self.register_scalable(lbl_exec_header, "head", "bold")
@@ -985,18 +1097,18 @@ class DeepVirApp(tk.Tk):
         card_fastp = tk.Frame(left_col, bg=COLOR_CARD, highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
         card_fastp.pack(fill="x", pady=6)
 
-        lbl_fastp_header = tk.Label(card_fastp, text="Read QC & Quality Filtering (fastp)", fg=COLOR_ACCENT, bg=COLOR_CARD)
-        self.register_scalable(lbl_fastp_header, "head", "bold")
-        lbl_fastp_header.pack(anchor="w", padx=14, pady=(12, 4))
+        self.lbl_fastp_header = tk.Label(card_fastp, text="Read QC & Quality Filtering (Fastp / Chopper)", fg=COLOR_ACCENT, bg=COLOR_CARD)
+        self.register_scalable(self.lbl_fastp_header, "head", "bold")
+        self.lbl_fastp_header.pack(anchor="w", padx=14, pady=(12, 4))
 
-        lbl_fastp_sub = tk.Label(
+        self.lbl_fastp_sub = tk.Label(
             card_fastp,
-            text="Specify length trimming thresholds and Phred quality score for fastp:",
+            text="Specify length trimming thresholds and Phred quality score:",
             fg=COLOR_MUTED,
             bg=COLOR_CARD,
         )
-        self.register_scalable(lbl_fastp_sub, "small")
-        lbl_fastp_sub.pack(anchor="w", padx=14, pady=(0, 10))
+        self.register_scalable(self.lbl_fastp_sub, "small")
+        self.lbl_fastp_sub.pack(anchor="w", padx=14, pady=(0, 10))
 
         row_qc_params = tk.Frame(card_fastp, bg=COLOR_CARD)
         row_qc_params.pack(fill="x", padx=14, pady=(0, 10))
@@ -1043,47 +1155,69 @@ class DeepVirApp(tk.Tk):
 
         # Quick Presets Buttons row
         row_presets = tk.Frame(card_fastp, bg=COLOR_CARD)
-        row_presets.pack(fill="x", padx=14, pady=(0, 14))
+        row_presets.pack(fill="x", padx=14, pady=(0, 10))
 
         lbl_presets = tk.Label(row_presets, text="Presets:", bg=COLOR_CARD, fg=COLOR_MUTED)
         self.register_scalable(lbl_presets, "small", "bold")
         lbl_presets.pack(side="left", padx=(0, 8))
 
-        def set_fastp_preset(length, qual):
+        def set_qc_preset(length, qual):
             self.var_fastp_len.set(length)
             self.var_fastp_qual.set(qual)
 
-        btn_illumina = tk.Button(
-            row_presets,
-            text="Illumina (L: 30, Q: 30)",
-            bg="#334155",
-            fg=COLOR_TEXT,
-            relief="flat",
-            padx=10,
-            pady=4,
-            cursor="hand2",
-            activebackground="#475569",
-            activeforeground="#ffffff",
-            command=lambda: set_fastp_preset(30, 30),
-        )
-        self.register_scalable(btn_illumina, "small", "bold")
-        btn_illumina.pack(side="left", padx=(0, 8))
+        # Illumina QC Presets Container
+        self.frame_qc_presets_illumina = tk.Frame(row_presets, bg=COLOR_CARD)
+        self.frame_qc_presets_illumina.pack(side="left")
 
-        btn_nanopore = tk.Button(
-            row_presets,
-            text="Nanopore / Long-read (L: 500, Q: 10)",
-            bg="#334155",
-            fg=COLOR_TEXT,
-            relief="flat",
-            padx=10,
-            pady=4,
-            cursor="hand2",
-            activebackground="#475569",
-            activeforeground="#ffffff",
-            command=lambda: set_fastp_preset(500, 10),
-        )
-        self.register_scalable(btn_nanopore, "small", "bold")
-        btn_nanopore.pack(side="left")
+        for label, length, qual in [
+            ("Standard (L: 30, Q: 30)", 30, 30),
+            ("Strict (L: 50, Q: 30)", 50, 30),
+            ("Relaxed (L: 30, Q: 20)", 30, 20),
+        ]:
+            b = tk.Button(
+                self.frame_qc_presets_illumina,
+                text=label,
+                bg="#334155",
+                fg=COLOR_TEXT,
+                relief="flat",
+                padx=8,
+                pady=2,
+                cursor="hand2",
+                activebackground="#475569",
+                activeforeground="#ffffff",
+                command=lambda l=length, q=qual: set_qc_preset(l, q),
+            )
+            self.register_scalable(b, "small", "bold")
+            b.pack(side="left", padx=2)
+
+        # Nanopore QC Presets Container (Chopper)
+        self.frame_qc_presets_nanopore = tk.Frame(row_presets, bg=COLOR_CARD)
+
+        for label, length, qual in [
+            ("Low Load / Degraded (L: 300, Q: 9)", 300, 9),
+            ("Standard Gold (L: 500, Q: 10)", 500, 10),
+            ("HAC Quality (L: 500, Q: 12)", 500, 12),
+            ("R10.4 / SUP (L: 500, Q: 14)", 500, 14),
+        ]:
+            b = tk.Button(
+                self.frame_qc_presets_nanopore,
+                text=label,
+                bg="#334155",
+                fg=COLOR_TEXT,
+                relief="flat",
+                padx=8,
+                pady=2,
+                cursor="hand2",
+                activebackground="#475569",
+                activeforeground="#ffffff",
+                command=lambda l=length, q=qual: set_qc_preset(l, q),
+            )
+            self.register_scalable(b, "small", "bold")
+            b.pack(side="left", padx=2)
+
+        self.lbl_fastp_mode_hint = tk.Label(card_fastp, text="", bg=COLOR_CARD, fg=COLOR_ACCENT)
+        self.register_scalable(self.lbl_fastp_mode_hint, "small", "bold")
+        self.lbl_fastp_mode_hint.pack(anchor="w", padx=14, pady=(0, 10))
 
         # ---------------------------------------------------------------------
         # RIGHT COLUMN: Analysis Modules Selection Card
@@ -1104,27 +1238,8 @@ class DeepVirApp(tk.Tk):
         self.register_scalable(lbl_mod_sub, "small")
         lbl_mod_sub.pack(anchor="w", padx=16, pady=(0, 10))
 
-        # Checkbox state variables
-        self.mod_host_filter = tk.BooleanVar(value=False)
-        self.var_host_accession = tk.StringVar(value="GCA_022682495.2, GCF_000819615.1")
-        self.mod_reads_kraken = tk.BooleanVar(value=False)
-        self.mod_reads_diamond = tk.BooleanVar(value=False)
-        self.mod_assembly = tk.BooleanVar(value=True)
-        self.mod_kraken2 = tk.BooleanVar(value=True)
-        self.mod_diamond = tk.BooleanVar(value=True)
-        self.mod_darkmatter = tk.BooleanVar(value=True)
-        self.var_rdrp_minscore = tk.IntVar(value=75)
-        self.mod_rvdb = tk.BooleanVar(value=False)
-        self.mod_download_only = tk.BooleanVar(value=False)
-        self.mod_remove_download = tk.BooleanVar(value=False)
-
-        # De novo Assembler engine selection (config.yaml -> tool: denovo)
-        self.asm_spades = tk.BooleanVar(value=True)
-        self.asm_megahit = tk.BooleanVar(value=False)
-        self.asm_flye = tk.BooleanVar(value=False)
-        self.asm_raven = tk.BooleanVar(value=False)
-        self.asm_medaka_flye = tk.BooleanVar(value=False)
-        self.asm_medaka_raven = tk.BooleanVar(value=False)
+        # Platform & Sequencing Data Type Selector
+        self.build_platform_selector(card_modules)
 
         # Host Genome Filtering / Depletion Group (BWA)
         self.build_host_filter_group(card_modules)
@@ -1145,14 +1260,13 @@ class DeepVirApp(tk.Tk):
         # Viral Discovery / Dark Matter Group (with configurable RdRp minscore)
         self.build_darkmatter_group(card_modules)
 
-        self.create_check_group(
-            card_modules,
-            "> SRA Data Management",
-            [
-                ("Download SRA accessions only without running analysis (--download-only)", self.mod_download_only),
-                ("Remove downloaded raw SRA archives after extraction (--remove-download)", self.mod_remove_download),
-            ],
-        )
+        # Wire reactive visibility updates for external databases
+        for v in [self.mod_reads_kraken, self.mod_reads_diamond, self.mod_kraken2, self.mod_diamond, self.mod_assembly]:
+            v.trace_add("write", lambda *_: self.update_database_visibility())
+
+        # Synchronize platform and database initial layouts
+        self.update_database_visibility()
+        self.on_platform_changed()
 
     # =========================================================================
     # TAB 2: PROFILE & PER-RULE RESOURCES BUILDER
@@ -1581,6 +1695,8 @@ class DeepVirApp(tk.Tk):
     # =========================================================================
     def get_direct_sra_tokens(self) -> list[str]:
         """Extracts valid SRA accession IDs typed directly in the GUI text box."""
+        if hasattr(self, "mod_sra") and not self.mod_sra.get():
+            return []
         if not hasattr(self, "txt_sra_direct"):
             return []
         raw = self.txt_sra_direct.get("1.0", "end-1c").strip()
@@ -1615,6 +1731,44 @@ class DeepVirApp(tk.Tk):
             self.txt_sra_direct.delete("1.0", "end")
             self.txt_sra_direct.insert("1.0", combined)
             self._update_sra_direct_count()
+
+    def on_sra_toggle(self):
+        """Toggles visibility of SRA accessions input and SRA download settings."""
+        if not hasattr(self, "frame_sra_container"):
+            return
+        if self.mod_sra.get():
+            self.frame_sra_container.pack(fill="x", padx=14, pady=(4, 8))
+        else:
+            self.frame_sra_container.pack_forget()
+
+    def update_database_visibility(self):
+        """
+        Dynamically reveals or hides the External Reference Databases card and its sub-fields
+        based on whether Kraken2 or DIAMOND modules are enabled.
+        """
+        if not hasattr(self, "card_dbs"):
+            return
+        need_kraken = bool(self.mod_reads_kraken.get() or (self.mod_assembly.get() and self.mod_kraken2.get()))
+        need_diamond = bool(self.mod_reads_diamond.get() or (self.mod_assembly.get() and self.mod_diamond.get()))
+
+        if not need_kraken and not need_diamond:
+            self.card_dbs.pack_forget()
+            return
+
+        if hasattr(self, "card_exec"):
+            self.card_dbs.pack(fill="x", pady=6, before=self.card_exec)
+        else:
+            self.card_dbs.pack(fill="x", pady=6)
+
+        if need_kraken and hasattr(self, "frame_kraken_db"):
+            self.frame_kraken_db.pack(fill="x")
+        elif hasattr(self, "frame_kraken_db"):
+            self.frame_kraken_db.pack_forget()
+
+        if need_diamond and hasattr(self, "frame_diamond_db"):
+            self.frame_diamond_db.pack(fill="x")
+        elif hasattr(self, "frame_diamond_db"):
+            self.frame_diamond_db.pack_forget()
 
     def create_path_row(self, parent, label_text, str_var, is_folder=True, filetypes=None):
         """
@@ -1656,6 +1810,7 @@ class DeepVirApp(tk.Tk):
 
         btn_browse = ttk.Button(input_box, text="Browse...", style="Secondary.TButton", command=browse)
         btn_browse.pack(side="right")
+        return frame
 
     def create_check_group(self, parent, title, items):
         """
@@ -1673,6 +1828,178 @@ class DeepVirApp(tk.Tk):
             chk.pack(anchor="w", padx=14, pady=3)
 
         tk.Frame(box, bg="#172033", height=6).pack()
+
+    def build_platform_selector(self, parent):
+        """
+        Constructs the high-visibility Sequencing Platform / Data Type Selector.
+        Guides assembler, QC trimming, and direct read-level error-correction strategies.
+        """
+        box = tk.Frame(parent, bg="#131d31", highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
+        box.pack(fill="x", padx=14, pady=(0, 8))
+
+        row_title = tk.Frame(box, bg="#131d31")
+        row_title.pack(fill="x", padx=10, pady=(8, 2))
+
+        lbl = tk.Label(row_title, text="> Sequencing Platform & Data Type Selection", fg=COLOR_PRIMARY, bg="#131d31")
+        self.register_scalable(lbl, "subhead", "bold")
+        lbl.pack(side="left")
+
+        self.lbl_platform_badge = tk.Label(
+            row_title,
+            text="[MODE: ILLUMINA SHORT READS]",
+            fg=COLOR_ACCENT,
+            bg="#0f172a",
+            padx=8,
+            pady=2,
+            relief="flat",
+        )
+        self.register_scalable(self.lbl_platform_badge, "small", "bold")
+        self.lbl_platform_badge.pack(side="right")
+
+        lbl_desc = tk.Label(
+            box,
+            text="Select data type to automatically configure QC parameters, assembler engines, and error-correction strategies:",
+            fg=COLOR_MUTED,
+            bg="#131d31",
+        )
+        self.register_scalable(lbl_desc, "small")
+        lbl_desc.pack(anchor="w", padx=10, pady=(0, 6))
+
+        row_options = tk.Frame(box, bg="#131d31")
+        row_options.pack(fill="x", padx=12, pady=(0, 6))
+
+        rb_illumina = tk.Radiobutton(
+            row_options,
+            text="Illumina (Short Reads)",
+            variable=self.var_platform,
+            value="illumina",
+            command=self.on_platform_changed,
+            bg="#131d31",
+            fg=COLOR_TEXT,
+            selectcolor="#0f172a",
+            activebackground="#131d31",
+            activeforeground="#ffffff",
+            cursor="hand2",
+        )
+        self.register_scalable(rb_illumina, "body", "bold")
+        rb_illumina.pack(side="left", padx=(0, 24), pady=2)
+
+        rb_nanopore = tk.Radiobutton(
+            row_options,
+            text="Nanopore / MinION (Long Reads)",
+            variable=self.var_platform,
+            value="nanopore",
+            command=self.on_platform_changed,
+            bg="#131d31",
+            fg=COLOR_TEXT,
+            selectcolor="#0f172a",
+            activebackground="#131d31",
+            activeforeground="#ffffff",
+            cursor="hand2",
+        )
+        self.register_scalable(rb_nanopore, "body", "bold")
+        rb_nanopore.pack(side="left", pady=2)
+
+        # Dynamic Capability Matrix Card
+        self.frame_platform_summary = tk.Frame(box, bg="#0b1329", highlightbackground="#334155", highlightthickness=1)
+        self.frame_platform_summary.pack(fill="x", padx=12, pady=(2, 8))
+
+        row_sum_header = tk.Frame(self.frame_platform_summary, bg="#0b1329")
+        row_sum_header.pack(fill="x", padx=10, pady=(6, 3))
+
+        lbl_sum_icon = tk.Label(row_sum_header, text="Platform Feature Matrix & Active Capabilities Breakdown:", fg=COLOR_PRIMARY, bg="#0b1329")
+        self.register_scalable(lbl_sum_icon, "small", "bold")
+        lbl_sum_icon.pack(side="left")
+
+        self.lbl_sum_qc = tk.Label(self.frame_platform_summary, text="", fg=COLOR_TEXT, bg="#0b1329", anchor="w", justify="left")
+        self.register_scalable(self.lbl_sum_qc, "small")
+        self.lbl_sum_qc.pack(fill="x", padx=14, pady=1)
+
+        self.lbl_sum_asm = tk.Label(self.frame_platform_summary, text="", fg=COLOR_TEXT, bg="#0b1329", anchor="w", justify="left")
+        self.register_scalable(self.lbl_sum_asm, "small")
+        self.lbl_sum_asm.pack(fill="x", padx=14, pady=1)
+
+        self.lbl_sum_tax = tk.Label(self.frame_platform_summary, text="", fg=COLOR_TEXT, bg="#0b1329", anchor="w", justify="left")
+        self.register_scalable(self.lbl_sum_tax, "small")
+        self.lbl_sum_tax.pack(fill="x", padx=14, pady=1)
+
+        self.lbl_sum_dm = tk.Label(self.frame_platform_summary, text="", fg=COLOR_TEXT, bg="#0b1329", anchor="w", justify="left")
+        self.register_scalable(self.lbl_sum_dm, "small")
+        self.lbl_sum_dm.pack(fill="x", padx=14, pady=(1, 6))
+
+    def on_platform_changed(self):
+        """
+        Dynamically synchronizes pipeline presets, assembler availability, and visual indicators.
+        """
+        is_nanopore = (self.var_platform.get() == "nanopore")
+        if is_nanopore:
+            if hasattr(self, "lbl_platform_badge"):
+                self.lbl_platform_badge.config(text="[MODE: NANOPORE / MinION LONG READS]", fg="#38bdf8")
+            # Set QC trimming to Nanopore conservative defaults
+            if hasattr(self, "var_fastp_len"):
+                self.var_fastp_len.set(500)
+            if hasattr(self, "var_fastp_qual"):
+                self.var_fastp_qual.set(10)
+            # Update QC Card dynamically for Chopper
+            if hasattr(self, "lbl_fastp_header"):
+                self.lbl_fastp_header.config(text="Read QC & Filtering: Chopper (Nanopore Long Reads)")
+            if hasattr(self, "lbl_fastp_sub"):
+                self.lbl_fastp_sub.config(text="Chopper provides high-throughput Rust streaming QC tailored for ONT reads (prevents over-trimming):")
+            if hasattr(self, "lbl_fastp_mode_hint"):
+                self.lbl_fastp_mode_hint.config(text="✓ Applied: Chopper Nanopore Defaults (Length >= 500 bp, Phred Quality >= Q10)", fg="#38bdf8")
+            # Toggle QC Preset buttons (show Chopper presets, hide Fastp presets)
+            if hasattr(self, "frame_qc_presets_illumina") and hasattr(self, "frame_qc_presets_nanopore"):
+                self.frame_qc_presets_illumina.pack_forget()
+                self.frame_qc_presets_nanopore.pack(side="left")
+            # Switch default assembler to Flye if SPAdes/MEGAHIT was selected
+            if hasattr(self, "asm_spades") and hasattr(self, "asm_flye"):
+                if self.asm_spades.get() or self.asm_megahit.get():
+                    self.asm_spades.set(False)
+                    self.asm_megahit.set(False)
+                    self.asm_flye.set(True)
+            # Update feature matrix labels
+            if hasattr(self, "lbl_sum_qc"):
+                self.lbl_sum_qc.config(text="  • QC Filtering: Chopper (Rust streaming filter, Phred Q >= 10, Length >= 500 bp) [ACTIVE - Replaces Fastp]", fg="#38bdf8")
+                self.lbl_sum_asm.config(text="  • Assemblers: Flye, Raven & Medaka Neural Polishing [ACTIVE] (SPAdes/MEGAHIT hidden)", fg="#38bdf8")
+                self.lbl_sum_tax.config(text="  • Taxonomy: Kraken2 & DIAMOND MEGAN LCA on Long Reads + Assembled Contigs [ACTIVE]", fg="#10b981")
+                self.lbl_sum_dm.config(text="  • Dark Matter: Direct Read-Level Discovery (Strategy 1: Racon Back-mapping + Strategy 2: Frameshift Stitching) [ACTIVE]", fg="#38bdf8")
+        else:
+            if hasattr(self, "lbl_platform_badge"):
+                self.lbl_platform_badge.config(text="[MODE: ILLUMINA SHORT READS]", fg=COLOR_ACCENT)
+            # Set QC trimming to Illumina defaults
+            if hasattr(self, "var_fastp_len"):
+                self.var_fastp_len.set(30)
+            if hasattr(self, "var_fastp_qual"):
+                self.var_fastp_qual.set(30)
+            # Update QC Card dynamically for Fastp
+            if hasattr(self, "lbl_fastp_header"):
+                self.lbl_fastp_header.config(text="Read QC & Adapter Trimming: Fastp (Illumina Short Reads)")
+            if hasattr(self, "lbl_fastp_sub"):
+                self.lbl_fastp_sub.config(text="Fastp handles short-read adapter removal, polyG trimming, and strict Phred quality filtering:")
+            if hasattr(self, "lbl_fastp_mode_hint"):
+                self.lbl_fastp_mode_hint.config(text="✓ Applied: Fastp Illumina Defaults (Length >= 30 bp, Phred Quality >= Q30)", fg="#a855f7")
+            # Toggle QC Preset buttons (show Fastp presets, hide Chopper presets)
+            if hasattr(self, "frame_qc_presets_illumina") and hasattr(self, "frame_qc_presets_nanopore"):
+                self.frame_qc_presets_nanopore.pack_forget()
+                self.frame_qc_presets_illumina.pack(side="left")
+            # Switch default assembler to SPAdes
+            if hasattr(self, "asm_spades") and hasattr(self, "asm_flye"):
+                if self.asm_flye.get() or self.asm_raven.get():
+                    self.asm_flye.set(False)
+                    self.asm_raven.set(False)
+                    self.asm_spades.set(True)
+            # Update feature matrix labels
+            if hasattr(self, "lbl_sum_qc"):
+                self.lbl_sum_qc.config(text="  • QC Trimming: Fastp (Short-read adapter trimming & dedup, Phred Q >= 30, Length >= 30 bp) [ACTIVE]", fg="#a855f7")
+                self.lbl_sum_asm.config(text="  • Assemblers: SPAdes (metaviral/RNA) & MEGAHIT [ACTIVE] (Flye/Raven hidden)", fg="#a855f7")
+                self.lbl_sum_tax.config(text="  • Taxonomy: Kraken2 & DIAMOND MEGAN LCA on Short Reads + Assembled Contigs [ACTIVE]", fg="#10b981")
+                self.lbl_sum_dm.config(text="  • Dark Matter: Contig-Level Multi-Code Translation (getorf) + CD-HIT + PalmAnnot [ACTIVE]", fg="#a855f7")
+
+        # Synchronize assembler and dark matter progressive disclosure
+        if hasattr(self, "on_assembly_toggle"):
+            self.on_assembly_toggle()
+        if hasattr(self, "on_darkmatter_toggle"):
+            self.on_darkmatter_toggle()
 
     def build_host_filter_group(self, parent):
         """
@@ -1697,7 +2024,7 @@ class DeepVirApp(tk.Tk):
         chk_hf.pack(anchor="w", padx=14, pady=3)
 
         self.frame_host_acc = tk.Frame(box, bg="#0f172a", highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
-        self.frame_host_acc.pack(fill="x", padx=16, pady=(4, 8))
+        # Note: self.frame_host_acc is progressively shown via on_host_filter_toggle()
 
         acc_top_row = tk.Frame(self.frame_host_acc, bg="#0f172a")
         acc_top_row.pack(fill="x", padx=10, pady=(6, 2))
@@ -1818,10 +2145,15 @@ class DeepVirApp(tk.Tk):
         self.var_host_accession.set(", ".join(tokens))
 
     def on_host_filter_toggle(self):
-        state = "normal" if self.mod_host_filter.get() else "disabled"
-        self.ent_host_acc.config(state=state)
-        for btn in getattr(self, "host_preset_buttons", []):
-            btn.config(state=state)
+        if not hasattr(self, "frame_host_acc"):
+            return
+        if self.mod_host_filter.get():
+            self.frame_host_acc.pack(fill="x", padx=16, pady=(4, 8))
+            self.ent_host_acc.config(state="normal")
+            for btn in getattr(self, "host_preset_buttons", []):
+                btn.config(state="normal")
+        else:
+            self.frame_host_acc.pack_forget()
 
     def build_assembly_group(self, parent):
         """
@@ -1845,7 +2177,6 @@ class DeepVirApp(tk.Tk):
 
         # Sub-card: Assembler selection (tool.denovo in config.yaml)
         self.frame_assemblers = tk.Frame(box, bg="#0f172a", highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
-        self.frame_assemblers.pack(fill="x", padx=16, pady=(4, 8))
 
         lbl_tools = tk.Label(
             self.frame_assemblers,
@@ -1859,38 +2190,64 @@ class DeepVirApp(tk.Tk):
         grid_tools = tk.Frame(self.frame_assemblers, bg="#0f172a")
         grid_tools.pack(fill="x", padx=10, pady=(0, 6))
 
-        # Column 1: Short Reads & Hybrids
-        col1 = tk.Frame(grid_tools, bg="#0f172a")
-        col1.pack(side="left", fill="x", expand=True)
+        # Column 1: Short Reads (Illumina)
+        self.col_illumina = tk.Frame(grid_tools, bg="#0f172a")
 
-        self.chk_spades = ttk.Checkbutton(col1, text="SPAdes (Illumina RNA/viral - default)", variable=self.asm_spades)
+        row_c1_title = tk.Frame(self.col_illumina, bg="#0f172a")
+        row_c1_title.pack(fill="x", pady=(0, 4))
+
+        lbl_col1_header = tk.Label(row_c1_title, text="Illumina Engines (Short Reads):", fg="#a855f7", bg="#0f172a")
+        self.register_scalable(lbl_col1_header, "small", "bold")
+        lbl_col1_header.pack(side="left")
+
+        self.lbl_illumina_asm_status = tk.Label(row_c1_title, text="[Active]", fg="#10b981", bg="#0f172a")
+        self.register_scalable(self.lbl_illumina_asm_status, "small", "bold")
+        self.lbl_illumina_asm_status.pack(side="right")
+
+        self.chk_spades = ttk.Checkbutton(self.col_illumina, text="SPAdes (Illumina RNA/viral - default)", variable=self.asm_spades)
         self.chk_spades.pack(anchor="w", pady=2)
 
-        self.chk_megahit = ttk.Checkbutton(col1, text="MEGAHIT (Illumina - fast / low RAM)", variable=self.asm_megahit)
+        self.chk_megahit = ttk.Checkbutton(self.col_illumina, text="MEGAHIT (Illumina - fast / low RAM)", variable=self.asm_megahit)
         self.chk_megahit.pack(anchor="w", pady=2)
 
-        self.chk_medaka_flye = ttk.Checkbutton(col1, text="Medaka + Flye (ONP polished)", variable=self.asm_medaka_flye)
-        self.chk_medaka_flye.pack(anchor="w", pady=2)
+        # Column 2: Long Reads (Nanopore)
+        self.col_nanopore = tk.Frame(grid_tools, bg="#0f172a")
 
-        # Column 2: Long Reads
-        col2 = tk.Frame(grid_tools, bg="#0f172a")
-        col2.pack(side="left", fill="x", expand=True)
+        row_c2_title = tk.Frame(self.col_nanopore, bg="#0f172a")
+        row_c2_title.pack(fill="x", pady=(0, 4))
 
-        self.chk_flye = ttk.Checkbutton(col2, text="Flye (Nanopore / PacBio long reads)", variable=self.asm_flye)
+        lbl_col2_header = tk.Label(row_c2_title, text="Nanopore Engines (Long Reads):", fg="#38bdf8", bg="#0f172a")
+        self.register_scalable(lbl_col2_header, "small", "bold")
+        lbl_col2_header.pack(side="left")
+
+        self.lbl_nanopore_asm_status = tk.Label(row_c2_title, text="[Active]", fg="#38bdf8", bg="#0f172a")
+        self.register_scalable(self.lbl_nanopore_asm_status, "small", "bold")
+        self.lbl_nanopore_asm_status.pack(side="right")
+
+        self.chk_flye = ttk.Checkbutton(self.col_nanopore, text="Flye (Nanopore / PacBio long reads)", variable=self.asm_flye)
         self.chk_flye.pack(anchor="w", pady=2)
 
-        self.chk_raven = ttk.Checkbutton(col2, text="Raven (Nanopore long reads - fast)", variable=self.asm_raven)
+        self.chk_raven = ttk.Checkbutton(self.col_nanopore, text="Raven (Nanopore long reads - fast)", variable=self.asm_raven)
         self.chk_raven.pack(anchor="w", pady=2)
 
-        self.chk_medaka_raven = ttk.Checkbutton(col2, text="Medaka + Raven (ONP polished)", variable=self.asm_medaka_raven)
+        self.chk_medaka_flye = ttk.Checkbutton(self.col_nanopore, text="Medaka + Flye (ONP polished)", variable=self.asm_medaka_flye)
+        self.chk_medaka_flye.pack(anchor="w", pady=2)
+
+        self.chk_medaka_raven = ttk.Checkbutton(self.col_nanopore, text="Medaka + Raven (ONP polished)", variable=self.asm_medaka_raven)
         self.chk_medaka_raven.pack(anchor="w", pady=2)
 
-        # Downstream contig annotation toggles
-        chk_k2 = ttk.Checkbutton(box, text="Taxonomic classification of contigs via Kraken2 (--kraken2)", variable=self.mod_kraken2)
-        chk_k2.pack(anchor="w", padx=14, pady=3)
+        # Downstream contig annotation toggles container
+        self.frame_contig_tax = tk.Frame(box, bg="#172033")
 
-        chk_dia = ttk.Checkbutton(box, text="Protein annotation of contigs via DIAMOND NR (--diamond)", variable=self.mod_diamond)
-        chk_dia.pack(anchor="w", padx=14, pady=3)
+        lbl_tax_title = tk.Label(self.frame_contig_tax, text="Downstream Contig Classification & Annotation Modules:", fg=COLOR_MUTED, bg="#172033")
+        self.register_scalable(lbl_tax_title, "small", "bold")
+        lbl_tax_title.pack(anchor="w", padx=14, pady=(2, 2))
+
+        self.chk_k2 = ttk.Checkbutton(self.frame_contig_tax, text="Taxonomic classification of contigs via Kraken2 (--kraken2)", variable=self.mod_kraken2)
+        self.chk_k2.pack(anchor="w", padx=14, pady=2)
+
+        self.chk_dia = ttk.Checkbutton(self.frame_contig_tax, text="Protein annotation of contigs via DIAMOND NR (--diamond)", variable=self.mod_diamond)
+        self.chk_dia.pack(anchor="w", padx=14, pady=2)
 
         tk.Frame(box, bg="#172033", height=6).pack()
 
@@ -1898,16 +2255,44 @@ class DeepVirApp(tk.Tk):
         self.on_assembly_toggle()
 
     def on_assembly_toggle(self):
-        state = "normal" if self.mod_assembly.get() else "disabled"
-        for chk in [
-            self.chk_spades,
-            self.chk_megahit,
-            self.chk_flye,
-            self.chk_raven,
-            self.chk_medaka_flye,
-            self.chk_medaka_raven,
-        ]:
-            chk.config(state=state)
+        if not hasattr(self, "frame_assemblers"):
+            return
+        asm_enabled = self.mod_assembly.get()
+        is_nanopore = (self.var_platform.get() == "nanopore")
+
+        if not asm_enabled:
+            self.frame_assemblers.pack_forget()
+            if hasattr(self, "frame_contig_tax"):
+                self.frame_contig_tax.pack_forget()
+            return
+
+        # Show assembler frame & contig annotation frame
+        self.frame_assemblers.pack(fill="x", padx=16, pady=(4, 8))
+        if hasattr(self, "frame_contig_tax"):
+            self.frame_contig_tax.pack(fill="x", padx=0, pady=2)
+
+        if is_nanopore:
+            # Nanopore: show Nanopore engines, hide Illumina engines
+            if hasattr(self, "col_illumina"):
+                self.col_illumina.pack_forget()
+            if hasattr(self, "col_nanopore"):
+                self.col_nanopore.pack(side="left", fill="x", expand=True, padx=4)
+            self.chk_flye.config(state="normal")
+            self.chk_raven.config(state="normal")
+            self.chk_medaka_flye.config(state="normal")
+            self.chk_medaka_raven.config(state="normal")
+            if hasattr(self, "lbl_nanopore_asm_status"):
+                self.lbl_nanopore_asm_status.config(text="[Active for Nanopore]", fg="#38bdf8")
+        else:
+            # Illumina: show Illumina engines, hide Nanopore engines
+            if hasattr(self, "col_nanopore"):
+                self.col_nanopore.pack_forget()
+            if hasattr(self, "col_illumina"):
+                self.col_illumina.pack(side="left", fill="x", expand=True, padx=4)
+            self.chk_spades.config(state="normal")
+            self.chk_megahit.config(state="normal")
+            if hasattr(self, "lbl_illumina_asm_status"):
+                self.lbl_illumina_asm_status.config(text="[Active for Illumina]", fg="#10b981")
 
     def build_darkmatter_group(self, parent):
         """
@@ -1931,7 +2316,18 @@ class DeepVirApp(tk.Tk):
 
         # Sub-card for RdRp MinScore parameter
         self.frame_dm_params = tk.Frame(box, bg="#0f172a", highlightbackground=COLOR_CARD_BORDER, highlightthickness=1)
-        self.frame_dm_params.pack(fill="x", padx=16, pady=(4, 6))
+
+        row_contig_hdr = tk.Frame(self.frame_dm_params, bg="#0f172a")
+        row_contig_hdr.pack(fill="x", padx=10, pady=(6, 2))
+
+        lbl_contig_title = tk.Label(
+            row_contig_hdr,
+            text="Contig-Level PalmAnnot Discovery (Illumina & Assembled Contigs):",
+            fg="#a855f7",
+            bg="#0f172a"
+        )
+        self.register_scalable(lbl_contig_title, "small", "bold")
+        lbl_contig_title.pack(side="left")
 
         dm_row = tk.Frame(self.frame_dm_params, bg="#0f172a")
         dm_row.pack(fill="x", padx=10, pady=6)
@@ -1985,12 +2381,83 @@ class DeepVirApp(tk.Tk):
 
         self.var_rdrp_minscore.trace_add("write", lambda *_: self._sync_rdrp_minscore_to_results_tab())
 
-        chk_rvdb = ttk.Checkbutton(
+        # Sub-card: Nanopore / MinION Direct Read-Level Dark Matter
+        self.frame_nanopore_dm = tk.Frame(box, bg="#0b1329", highlightbackground="#0284c7", highlightthickness=1)
+
+        lbl_ont_title = tk.Label(
+            self.frame_nanopore_dm,
+            text="Nanopore / MinION Direct Read-Level Viral Discovery (Bypasses Assembly):",
+            fg="#38bdf8",
+            bg="#0b1329",
+        )
+        self.register_scalable(lbl_ont_title, "body", "bold")
+        lbl_ont_title.pack(anchor="w", padx=10, pady=(6, 3))
+
+        chk_ont_dm = ttk.Checkbutton(
+            self.frame_nanopore_dm,
+            text="Enable Direct Read-Level Dark Matter Search (--nanopore-darkmatter)",
+            variable=self.mod_nanopore_dm,
+        )
+        chk_ont_dm.pack(anchor="w", padx=12, pady=2)
+
+        chk_s1 = ttk.Checkbutton(
+            self.frame_nanopore_dm,
+            text="Strategy 1: Back-mapping & Overlap Consensus (minimap2 + Racon) [--nanopore-consensus]",
+            variable=self.mod_nanopore_consensus,
+        )
+        chk_s1.pack(anchor="w", padx=24, pady=(2, 0))
+
+        lbl_s1_note = tk.Label(
+            self.frame_nanopore_dm,
+            text="    ↳ All-vs-all overlap consensus polishes homopolymer indels via back-mapping (>98% accuracy)",
+            fg=COLOR_MUTED,
+            bg="#0b1329"
+        )
+        self.register_scalable(lbl_s1_note, "small")
+        lbl_s1_note.pack(anchor="w", padx=24, pady=(0, 2))
+
+        chk_s2 = ttk.Checkbutton(
+            self.frame_nanopore_dm,
+            text="Strategy 2: Frameshift-Tolerant ORF Prediction (rescues RdRp across indels) [--nanopore-frameshift]",
+            variable=self.mod_nanopore_frameshift,
+        )
+        chk_s2.pack(anchor="w", padx=24, pady=(2, 0))
+
+        lbl_s2_note = tk.Label(
+            self.frame_nanopore_dm,
+            text="    ↳ 6-frame translation stitches split motifs (A, B, C) across residual indels into an intact domain",
+            fg=COLOR_MUTED,
+            bg="#0b1329"
+        )
+        self.register_scalable(lbl_s2_note, "small")
+        lbl_s2_note.pack(anchor="w", padx=24, pady=(0, 4))
+
+        row_min_len = tk.Frame(self.frame_nanopore_dm, bg="#0b1329")
+        row_min_len.pack(fill="x", padx=24, pady=(2, 6))
+
+        lbl_minlen = tk.Label(row_min_len, text="Min Read Length (bp):", fg=COLOR_TEXT, bg="#0b1329")
+        self.register_scalable(lbl_minlen, "small")
+        lbl_minlen.pack(side="left", padx=(0, 6))
+
+        sp_minlen = tk.Spinbox(
+            row_min_len,
+            from_=200,
+            to=10000,
+            increment=100,
+            textvariable=self.var_nanopore_min_len,
+            width=6,
+            bg="#1e293b",
+            fg=COLOR_TEXT,
+            insertbackground="white",
+        )
+        self.register_scalable(sp_minlen, "small", "bold")
+        sp_minlen.pack(side="left")
+
+        self.chk_rvdb = ttk.Checkbutton(
             box,
             text="Cross-validation against Reference Viral DB (--rvdb)",
             variable=self.mod_rvdb,
         )
-        chk_rvdb.pack(anchor="w", padx=14, pady=3)
 
         tk.Frame(box, bg="#172033", height=6).pack()
         self.on_darkmatter_toggle()
@@ -2007,11 +2474,35 @@ class DeepVirApp(tk.Tk):
                 pass
 
     def on_darkmatter_toggle(self):
-        state = "normal" if self.mod_darkmatter.get() else "disabled"
+        if not hasattr(self, "frame_dm_params"):
+            return
+        dm_enabled = self.mod_darkmatter.get()
+        is_nanopore = (self.var_platform.get() == "nanopore")
+
+        if not dm_enabled:
+            self.frame_dm_params.pack_forget()
+            if hasattr(self, "frame_nanopore_dm"):
+                self.frame_nanopore_dm.pack_forget()
+            if hasattr(self, "chk_rvdb"):
+                self.chk_rvdb.pack_forget()
+            return
+
+        # Dark matter is enabled
+        self.frame_dm_params.pack(fill="x", padx=16, pady=(4, 6))
         if hasattr(self, "sp_rdrp_minscore"):
-            self.sp_rdrp_minscore.config(state=state)
+            self.sp_rdrp_minscore.config(state="normal")
         for btn in getattr(self, "dm_preset_buttons", []):
-            btn.config(state=state)
+            btn.config(state="normal")
+
+        if is_nanopore:
+            if hasattr(self, "frame_nanopore_dm"):
+                self.frame_nanopore_dm.pack(fill="x", padx=16, pady=(4, 6))
+        else:
+            if hasattr(self, "frame_nanopore_dm"):
+                self.frame_nanopore_dm.pack_forget()
+
+        if hasattr(self, "chk_rvdb"):
+            self.chk_rvdb.pack(anchor="w", padx=14, pady=3)
 
     # =========================================================================
     # TAB 3: REAL-TIME TERMINAL CONSOLE BUILDER
@@ -2490,8 +2981,8 @@ class DeepVirApp(tk.Tk):
         self.txt_reader.tag_config("muted", foreground=COLOR_MUTED)
         self.txt_reader.tag_config("error", foreground="#f87171")
 
-        # Initial scan
-        self.after(200, lambda: self.refresh_results_list(rescan_disk=True))
+        # Results list scanning is deferred until Tab 4 is opened (via _on_notebook_tab_changed)
+        # to ensure instantaneous GUI window startup without blocking on disk I/O.
 
     def _on_notebook_tab_changed(self, _event=None):
         """Refreshes the Results Explorer when switching to Tab 4 (uses fast cache if already scanned)."""
@@ -4177,22 +4668,30 @@ class DeepVirApp(tk.Tk):
 
         args += ["--jobs", str(self.var_jobs.get())]
 
-        # SRA File (if specified)
-        if self.var_sra.get().strip():
-            args += ["--sra", self.var_sra.get().strip()]
+        # SRA File & Direct Accessions (if SRA module is active)
+        if self.mod_sra.get():
+            if self.var_sra.get().strip():
+                args += ["--sra", self.var_sra.get().strip()]
 
-        # Direct SRA Accessions typed in the GUI text box
-        direct_sra_tokens = self.get_direct_sra_tokens()
-        if direct_sra_tokens:
-            LOGS_DIR.mkdir(parents=True, exist_ok=True)
-            sra_gui_file = LOGS_DIR / "sra_accessions_gui.txt"
-            sra_gui_file.write_text("\n".join(direct_sra_tokens) + "\n", encoding="utf-8", newline="\n")
-            args += ["--sra-list", ",".join(direct_sra_tokens)]
+            direct_sra_tokens = self.get_direct_sra_tokens()
+            if direct_sra_tokens:
+                LOGS_DIR.mkdir(parents=True, exist_ok=True)
+                sra_gui_file = LOGS_DIR / "sra_accessions_gui.txt"
+                sra_gui_file.write_text("\n".join(direct_sra_tokens) + "\n", encoding="utf-8", newline="\n")
+                args += ["--sra-list", ",".join(direct_sra_tokens)]
 
-        # External Databases
-        if self.var_diamond_db.get().strip():
+            if self.mod_download_only.get():
+                args.append("--download-only")
+            if self.mod_remove_download.get():
+                args.append("--remove-download")
+
+        # External Databases (filtered by active modules)
+        need_diamond = bool(self.mod_reads_diamond.get() or (self.mod_assembly.get() and self.mod_diamond.get()))
+        need_kraken = bool(self.mod_reads_kraken.get() or (self.mod_assembly.get() and self.mod_kraken2.get()))
+
+        if need_diamond and self.var_diamond_db.get().strip():
             args += ["--diamond_db", self.var_diamond_db.get().strip()]
-        if self.var_kraken2_db.get().strip():
+        if need_kraken and self.var_kraken2_db.get().strip():
             args += ["--kraken2_db", self.var_kraken2_db.get().strip()]
 
         # Read Preprocessing (fastp QC & Trimming)
@@ -4251,12 +4750,23 @@ class DeepVirApp(tk.Tk):
                 args += ["--rdrp-minscore", str(max(0, min(100, ms_val)))]
             except (ValueError, tk.TclError):
                 args += ["--rdrp-minscore", "75"]
+
+        # Platform & Nanopore Long-Read Discovery
+        args += ["--platform", self.var_platform.get()]
+        if self.var_platform.get() == "nanopore":
+            if self.mod_nanopore_dm.get():
+                args.append("--nanopore-darkmatter")
+            if self.mod_nanopore_consensus.get():
+                args.append("--nanopore-consensus")
+            if self.mod_nanopore_frameshift.get():
+                args.append("--nanopore-frameshift")
+            try:
+                args += ["--nanopore-min-len", str(int(self.var_nanopore_min_len.get()))]
+            except (ValueError, tk.TclError):
+                args += ["--nanopore-min-len", "500"]
+
         if self.mod_rvdb.get():
             args.append("--rvdb")
-        if self.mod_download_only.get():
-            args.append("--download-only")
-        if self.mod_remove_download.get():
-            args.append("--remove-download")
         if dry_run:
             args.append("--dry-run")
 

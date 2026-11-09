@@ -18,8 +18,8 @@ show-failed-logs: true
 # --- 2. Default Generic Resources --- #
 #######################################
 default-resources:
-  threads: 1
-  mem_mb: 2000
+  threads: 6
+  mem_mb: 16000
 
 #######################################
 # --- 3. Specific Rule Resources  --- #

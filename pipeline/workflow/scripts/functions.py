@@ -33,7 +33,8 @@ TOOL_OUTPUT_MAP = {
     "flye": "assembly.fasta",
     "raven": "assembly.fasta",
     "medaka_flye": "consensus.fasta", 
-    "medaka_raven": "consensus.fasta"
+    "medaka_raven": "consensus.fasta",
+    "nanopore_reads": "consensus_nanopore_reads.fasta"
 }
 
 # Global Lists to hold sorted SRA samples (Used by get_data.smk constraints)
@@ -104,20 +105,29 @@ def get_final_outputs(include_multiqc=False):
   
   # 3. Darkmatter
   if MODULES["darkmatter"]:
+    is_nanopore_dm = (config.get("platform") == "nanopore") or (isinstance(config.get("nanopore"), dict) and config.get("nanopore", {}).get("darkmatter", False))
     for sample, meta in SAMPLE_META.items():
         # Lógica de expansão para esta amostra
         current_tools = []
         if meta['mode'] == 'CONTIGS':
              current_tools = [PRE_ASSEMBLED_LABEL]
         else:
-             for tool in assembler_list:
-                if tool == "spades":
-                    # O CORREÇÃO CRÍTICA: Expande spades para os k-mers no Darkmatter também
-                    kmer_list = config["spades"]["kmer"]
-                    for k in kmer_list:
-                        current_tools.append(f"spades_k{k}")
-                else:
-                    current_tools.append(tool)
+             if MODULES.get("assembly", True):
+                 for tool in assembler_list:
+                    if tool == "spades":
+                        # O CORREÇÃO CRÍTICA: Expande spades para os k-mers no Darkmatter também
+                        kmer_list = config["spades"]["kmer"]
+                        for k in kmer_list:
+                            current_tools.append(f"spades_k{k}")
+                    else:
+                        current_tools.append(tool)
+
+             # Nanopore Read-Level Dark Matter discovery
+             if is_nanopore_dm and meta['mode'] != 'CONTIGS':
+                 if "nanopore_reads" not in current_tools:
+                     current_tools.append("nanopore_reads")
+                 # Ensure diamond reads output is tracked for nohit extraction
+                 final_outputs.append(f"{OUT_DIR}/{sample}/diamond_reads/{sample}_append_lineage_reads.tsv")
 
         final_outputs.extend(expand("{out_dir}/{sample}/darkmatter_{tool}/{sample}_report_summarize_{tool}.html", 
                 out_dir=OUT_DIR, sample=sample, tool=current_tools))
@@ -586,11 +596,31 @@ def get_contigs_path(wildcards):
         assembler_base = tool_name.split("medaka_", 1)[1]
         return os.path.join(OUT_DIR, sample, tool_name, f"{sample}_medaka_polish_{assembler_base}.fasta")
 
-    # 4. Caso Genérico (Megahit, Flye, Raven)
+    # 4. Caso Nanopore Read-Level Dark Matter
+    elif tool_name == "nanopore_reads":
+        return os.path.join(OUT_DIR, sample, "darkmatter_nanopore_reads", f"{sample}_consensus_nanopore_reads.fasta")
+
+    # 5. Caso Genérico (Megahit, Flye, Raven)
     else:
         if tool_name not in TOOL_OUTPUT_MAP:
              raise ValueError(f"Tool '{tool_name}' not recognized in TOOL_OUTPUT_MAP.")
         return os.path.join(OUT_DIR, sample, tool_name, f"{sample}_{tool_name}.fasta")
+
+def get_darkmatter_lineages_path(wildcards):
+    """
+    Returns DIAMOND lineage annotations for contigs or read-level dark matter.
+    """
+    if wildcards.tool == "nanopore_reads":
+        return os.path.join(OUT_DIR, wildcards.sample, "diamond_reads", f"{wildcards.sample}_append_lineage_reads.tsv")
+    return os.path.join(OUT_DIR, wildcards.sample, f"diamond_{wildcards.tool}", f"{wildcards.sample}_append_lineage_{wildcards.tool}.tsv")
+
+def get_darkmatter_nohits_path(wildcards):
+    """
+    Returns no-hit sequences (FASTA) for contigs or read-level dark matter.
+    """
+    if wildcards.tool == "nanopore_reads":
+        return os.path.join(OUT_DIR, wildcards.sample, "darkmatter_nanopore_reads", f"{wildcards.sample}_nohit_nanopore_reads.fasta")
+    return os.path.join(OUT_DIR, wildcards.sample, f"darkmatter_{wildcards.tool}", f"{wildcards.sample}_get_nohit_fasta_{wildcards.tool}.fasta")
 
 #####################################################
 # --- 8. Helper Functions of Get De novo input --- #
@@ -734,9 +764,13 @@ def get_diamond_db_input(wildcards):
     db_dir = os.path.join(_project_root, "resources", "diamond")
 
     # 1. Tenta achar qualquer arquivo .dmnd existente e válido (ignora symlinks quebrados)
-    dmnd_file = [f for f in glob.glob(os.path.join(db_dir, "*.dmnd")) if os.path.exists(f)]
+    #    O banco padrão RVDB (rvdb_prot.dmnd) tem prioridade sobre outros .dmnd.
+    dmnd_file = sorted(
+        [f for f in glob.glob(os.path.join(db_dir, "*.dmnd")) if os.path.exists(f)],
+        key=lambda f: (os.path.basename(f) != "rvdb_prot.dmnd", f),
+    )
     if dmnd_file:
-        return dmnd_file
+        return dmnd_file[:1]
 
     # 2. Procura por arquivos de índice do BLAST particionado (ex: .acc, .phr, .psq, .pal)
     blast_idx = [
@@ -754,8 +788,8 @@ def get_diamond_db_input(wildcards):
             if not os.path.basename(f).startswith(".") and os.path.exists(f)
         ]
 
-    # 3. Fallback automático de 1ª execução: solicita o banco base E. coli K-12 (ecoli_db.dmnd)
-    return [os.path.join(db_dir, "ecoli_db.dmnd")]
+    # 3. Fallback automático de 1ª execução: solicita o banco padrão RVDB proteico (rvdb_prot.dmnd)
+    return [os.path.join(db_dir, "rvdb_prot.dmnd")]
 
 def get_diamond_db_name(wildcards):
     """
@@ -768,7 +802,10 @@ def get_diamond_db_name(wildcards):
     db_dir = os.path.join(_project_root, "resources", "diamond")
 
     # Caso 1: Arquivo .dmnd único e válido
-    dmnd_files = [f for f in glob.glob(os.path.join(db_dir, "*.dmnd")) if os.path.exists(f)]
+    dmnd_files = sorted(
+        [f for f in glob.glob(os.path.join(db_dir, "*.dmnd")) if os.path.exists(f)],
+        key=lambda f: (os.path.basename(f) != "rvdb_prot.dmnd", f),
+    )
     if dmnd_files:
         return os.path.basename(dmnd_files[0])
 
@@ -782,7 +819,7 @@ def get_diamond_db_name(wildcards):
         return prefix
 
     # Caso 3: Banco base padrão (será criado pela regra download_default_diamond_db)
-    return "ecoli_db.dmnd"
+    return "rvdb_prot.dmnd"
 
 ########################################################
 # --- 12. Check Presence of header in Diamond File --- #

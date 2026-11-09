@@ -108,11 +108,11 @@ rule generate_kraken2_reads_stats:
 
 # --- Generate Dark Matter Statistics ---
 rule generate_darkmatter_stats:
-    """Generate dark matter (no-hit contigs) statistics"""
+    """Generate dark matter (no-hit contigs or reads) statistics"""
     wildcard_constraints:
-        tool = r"spades_k[\w]+|spades|megahit|flye|raven|medaka_flye|medaka_raven|pre_assembled"
+        tool = r"spades_k[\w]+|spades|megahit|flye|raven|medaka_flye|medaka_raven|pre_assembled|nanopore_reads"
     input:
-        nohits = os.path.join(OUT_DIR, "{sample}", "darkmatter_{tool}", "{sample}_get_nohit_fasta_{tool}.fasta")
+        nohits = get_darkmatter_nohits_path
     output:
         json = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_generate_darkmatter_stats_{tool}.json"),
         tsv = os.path.join(OUT_DIR, "{sample}", "stats", "{sample}_generate_darkmatter_stats_{tool}.tsv")

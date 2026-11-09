@@ -364,6 +364,15 @@ def generate_run_overrides(
         lines.append(f"  minscore: {minscore_val}")
         lines.append("  minpssmscore: 10")
 
+    is_nanopore = (args.platform == "nanopore") or args.nanopore_darkmatter
+    lines.append("")
+    lines.append(f'platform: "{args.platform}"')
+    lines.append("nanopore:")
+    lines.append(f'  darkmatter: {str(is_nanopore).lower()}')
+    lines.append(f'  consensus: {str(args.nanopore_consensus or is_nanopore).lower()}')
+    lines.append(f'  frameshift: {str(args.nanopore_frameshift or is_nanopore).lower()}')
+    lines.append(f'  min_read_len: {args.nanopore_min_len}')
+
     yaml_text = "\n".join(lines) + "\n"
     run_overrides.write_text(yaml_text, encoding="utf-8", newline="\n")
     shutil.copy2(run_overrides, backup_overrides)
@@ -485,6 +494,37 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reads-kraken", action="store_true", help="Enable Kraken2 on reads")
     parser.add_argument("--reads-diamond", action="store_true", help="Enable DIAMOND + MEGAN LCA on reads")
 
+    # Platform & Nanopore Configuration
+    parser.add_argument(
+        "--platform",
+        "--data-type",
+        dest="platform",
+        choices=["illumina", "nanopore"],
+        default="illumina",
+        help="Sequencing platform / data type: 'illumina' (short reads) or 'nanopore' (MinION long reads)",
+    )
+    parser.add_argument(
+        "--nanopore-darkmatter",
+        action="store_true",
+        help="Enable direct read-level dark matter search for Nanopore data",
+    )
+    parser.add_argument(
+        "--nanopore-consensus",
+        action="store_true",
+        help="Strategy 1: Enable back-mapping & overlap consensus (minimap2 + racon) for Nanopore reads",
+    )
+    parser.add_argument(
+        "--nanopore-frameshift",
+        action="store_true",
+        help="Strategy 2: Enable frameshift-tolerant ORF prediction for Nanopore reads",
+    )
+    parser.add_argument(
+        "--nanopore-min-len",
+        type=int,
+        default=500,
+        help="Minimum read length for Nanopore dark matter analysis (default: 500)",
+    )
+
     # Utility flags
     parser.add_argument("-n", "--dry-run", action="store_true", help="Perform Snakemake dry-run only")
     parser.add_argument("-g", "--gui", action="store_true", help="Launch Desktop GUI")
@@ -523,17 +563,19 @@ def launch_gui() -> int:
     conda_prefix = os.environ.get("CONDA_PREFIX", "")
     has_noxft = bool(conda_prefix and list((Path(conda_prefix) / "conda-meta").glob("tk-*noxft*.json")))
 
-    if runtime != "windows_wsl" and (not has_tk or has_noxft or os.environ.get("CONDA_DEFAULT_ENV") != ENV_NAME):
-        conda_init = get_conda_shell_init()
-        gui_posix = to_engine_path(str(gui_script), runtime)
-        return subprocess.call(["bash", "-c", f'{conda_init} {tk_xft_guard} python3 "{gui_posix}"'])
+    # Fast path: If current Python already has working Tkinter with scalable vector fonts, launch instantly
+    if has_tk and not has_noxft:
+        return subprocess.call([sys.executable, str(gui_script)])
 
-    if runtime == "windows_wsl" and not has_tk:
+    if runtime == "windows_wsl":
         conda_init = get_conda_shell_init()
         gui_posix = to_engine_path(str(gui_script), runtime)
         return subprocess.call(["wsl", "bash", "-c", f'{conda_init} {tk_xft_guard} python3 "{gui_posix}"'])
 
-    return subprocess.call([sys.executable, str(gui_script)])
+    # Fallback for Linux/WSL/macOS if Tkinter is missing or has headless tk-noxft
+    conda_init = get_conda_shell_init()
+    gui_posix = to_engine_path(str(gui_script), runtime)
+    return subprocess.call(["bash", "-c", f'{conda_init} {tk_xft_guard} python3 "{gui_posix}"'])
 
 
 def main() -> int:
