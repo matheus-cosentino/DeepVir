@@ -98,7 +98,7 @@ rule cd_hit_rvdb_prot_fasta:
     mkdir -p "$(dirname "{log}")"
     exec > "{log}" 2>&1
     echo "[INFO] Running cd-hit on {input.fasta} (identity: {params.c})..."
-    cd-hit -i "{input.fasta}" -o "{output.fasta}" -c {params.c} -M { .mem_mb} -d {params.d} -T {resources.threads}
+    cd-hit -i "{input.fasta}" -o "{output.fasta}" -c {params.c} -M {resources.mem_mb} -d {params.d} -T {resources.threads}
     echo "[INFO] Redundancy reduction complete: {output.fasta}"
     """
 
